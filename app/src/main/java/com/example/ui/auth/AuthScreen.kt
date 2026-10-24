@@ -123,7 +123,8 @@ fun AuthScreen(
                 Spacer(Modifier.height(16.dp))
                 Text(
                     if (signUp) "Create your account" else "Welcome back",
-                    style = MaterialTheme.typography.headlineMedium
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     if (signUp) "Sign up to keep your scans organized" else "Log in to continue",

@@ -249,7 +249,9 @@ object AuthManager {
         "ERROR_WEAK_PASSWORD" -> "Choose a stronger password (at least 6 characters)."
         "ERROR_NETWORK_REQUEST_FAILED" -> "No internet connection."
         "ERROR_OPERATION_NOT_ALLOWED" -> "This sign-in method is not enabled in Firebase yet (Authentication > Sign-in method)."
-        else -> "${e.javaClass.simpleName}: ${e.message?.takeIf { it.isNotBlank() } ?: "something went wrong"}"
+        else -> if (e.message?.contains("CONFIGURATION_NOT_FOUND") == true)
+            "Firebase Authentication is not set up for this project yet. In the Firebase console open Build > Authentication and tap Get started, then enable Email/Password and Google."
+        else "${e.javaClass.simpleName}: ${e.message?.takeIf { it.isNotBlank() } ?: "something went wrong"}"
     }
 
     private suspend fun <T> Task<T>.awaitResult(): T = suspendCancellableCoroutine { cont ->
