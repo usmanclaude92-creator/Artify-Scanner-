@@ -120,3 +120,6 @@ gradle :app:testDebugUnitTest
 ### External Credentials & Configuration
 - **Core Scanning & PDF Engine**: 100% offline, local-first. No external API keys required.
 - **Gemini AI Assistant**: Uses Firebase AI Logic. Add `app/google-services.json` from a Firebase project with the Gemini Developer API enabled (and App Check for production). Without it the assistant shows a configuration message.
+
+## Sign-in setup
+Sign-in (email and Google) and the AI Assistant use Firebase. Add the Firebase `google-services.json` as the GitHub Actions secret `GOOGLE_SERVICES_JSON` (never commit it; the repository is public). Register the SHA-1 of `ci/debug.keystore` in the Firebase Android app so Google sign-in works.
