@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -97,6 +98,7 @@ class DocumentRepository(private val context: Context) {
             val pdf = File(it.pdfFilePath)
             if (pdf.exists()) pdf.delete()
         }
+        File(documentsDir, documentId).deleteRecursively()
         for (page in pages) {
             val img = File(page.imagePath)
             if (img.exists()) img.delete()
@@ -107,6 +109,7 @@ class DocumentRepository(private val context: Context) {
 
     /**
      * Saves a complete scanning session as a persisted Document with multi-page PDF.
+     * Page images are copied into permanent storage. Throws [IOException] if saving fails.
      */
     suspend fun saveScanSession(
         title: String,
@@ -123,16 +126,38 @@ class DocumentRepository(private val context: Context) {
             "Scan_${dateFormat.format(Date())}"
         }.replace(Regex("[^a-zA-Z0-9_.-]"), "_")
 
+        // Move page images out of the (evictable) cache into permanent app storage
+        val docDir = File(documentsDir, docId).apply { mkdirs() }
+        val persistedPages = try {
+            pages.mapIndexed { index, page ->
+                val pageKey = page.id.ifBlank { UUID.randomUUID().toString() }
+                val processed = File(docDir, "p${index}_$pageKey.jpg")
+                val original = File(docDir, "o${index}_$pageKey.jpg")
+                File(page.localImagePath).copyTo(processed, overwrite = true)
+                val origSrc = File(page.originalImagePath)
+                if (origSrc.exists()) origSrc.copyTo(original, overwrite = true) else processed.copyTo(original, overwrite = true)
+                page.copy(localImagePath = processed.absolutePath, originalImagePath = original.absolutePath)
+            }
+        } catch (e: Exception) {
+            docDir.deleteRecursively()
+            throw IOException("Could not save page images: ${e.message}", e)
+        }
+
         val pdfFile = File(pdfsDir, "${cleanTitle}_$docId.pdf")
-        PdfEngine.createMultiPagePdf(
+        val pdfOk = PdfEngine.createMultiPagePdf(
             context = context,
-            pages = pages,
+            pages = persistedPages,
             config = pdfConfig.copy(filename = cleanTitle),
             outputFile = pdfFile
         )
+        if (!pdfOk || !pdfFile.exists() || pdfFile.length() == 0L) {
+            pdfFile.delete()
+            docDir.deleteRecursively()
+            throw IOException("PDF generation failed")
+        }
 
         // 2. Persist page records
-        val pageEntities = pages.mapIndexed { index, page ->
+        val pageEntities = persistedPages.mapIndexed { index, page ->
             PageEntity(
                 id = page.id.ifBlank { UUID.randomUUID().toString() },
                 documentId = docId,
@@ -147,9 +172,9 @@ class DocumentRepository(private val context: Context) {
         dao.insertPages(pageEntities)
 
         // Combine OCR text across all pages for full-text search
-        val fullOcrText = pages.joinToString("\n\n") { it.ocrText }
+        val fullOcrText = persistedPages.joinToString("\n\n") { it.ocrText }
 
-        val thumbnailPath = pages.firstOrNull()?.localImagePath ?: ""
+        val thumbnailPath = persistedPages.firstOrNull()?.localImagePath ?: ""
         val fileSizeBytes = if (pdfFile.exists()) pdfFile.length() else 0L
 
         val docEntity = DocumentEntity(
@@ -169,6 +194,18 @@ class DocumentRepository(private val context: Context) {
         dao.insertDocument(docEntity)
 
         docEntity.toItem()
+    }
+
+    /** Like [saveScanSession] but returns null instead of throwing when saving fails. */
+    suspend fun saveScanSessionOrNull(
+        title: String,
+        category: DocumentCategory,
+        pages: List<CapturedPage>,
+        pdfConfig: PdfExportConfig
+    ): ScannedDocumentItem? = try {
+        saveScanSession(title, category, pages, pdfConfig)
+    } catch (e: IOException) {
+        null
     }
 
     /**

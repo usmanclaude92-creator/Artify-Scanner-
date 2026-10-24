@@ -132,15 +132,19 @@ fun PdfToolsScreen(
                         pageSize = PdfPageSize.A4,
                         quality = PdfQuality.HIGH
                     )
-                    val doc = repository.saveScanSession(
+                    val doc = repository.saveScanSessionOrNull(
                         title = config.filename,
                         category = DocumentCategory.ALL,
                         pages = pages,
                         pdfConfig = config
                     )
                     isProcessing = false
-                    Toast.makeText(context, "Images converted to PDF successfully!", Toast.LENGTH_SHORT).show()
-                    onOpenDocument(doc.id)
+                    if (doc != null) {
+                        Toast.makeText(context, "Images converted to PDF successfully!", Toast.LENGTH_SHORT).show()
+                        onOpenDocument(doc.id)
+                    } else {
+                        Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
+                    }
                 } else {
                     isProcessing = false
                 }
@@ -211,15 +215,19 @@ fun PdfToolsScreen(
                                     pageSize = PdfPageSize.A4,
                                     quality = PdfQuality.HIGH
                                 )
-                                val mergedDoc = repository.saveScanSession(
+                                val mergedDoc = repository.saveScanSessionOrNull(
                                     title = config.filename,
                                     category = DocumentCategory.ALL,
                                     pages = combinedPages,
                                     pdfConfig = config
                                 )
                                 isProcessing = false
-                                Toast.makeText(context, "Merged into 1 PDF successfully!", Toast.LENGTH_SHORT).show()
-                                onOpenDocument(mergedDoc.id)
+                                if (mergedDoc != null) {
+                                    Toast.makeText(context, "Merged into 1 PDF successfully!", Toast.LENGTH_SHORT).show()
+                                    onOpenDocument(mergedDoc.id)
+                                } else {
+                                    Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
+                                }
                             }
                         } else {
                             Toast.makeText(context, "Please select at least 2 documents", Toast.LENGTH_SHORT).show()
@@ -331,15 +339,19 @@ fun PdfToolsScreen(
                                     pageSize = PdfPageSize.A4,
                                     quality = PdfQuality.COMPRESSED
                                 )
-                                val compDoc = repository.saveScanSession(
+                                val compDoc = repository.saveScanSessionOrNull(
                                     title = config.filename,
                                     category = first.category,
                                     pages = pages,
                                     pdfConfig = config
                                 )
                                 isProcessing = false
-                                Toast.makeText(context, "Compressed PDF created!", Toast.LENGTH_SHORT).show()
-                                onOpenDocument(compDoc.id)
+                                if (compDoc != null) {
+                                    Toast.makeText(context, "Compressed PDF created!", Toast.LENGTH_SHORT).show()
+                                    onOpenDocument(compDoc.id)
+                                } else {
+                                    Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
+                                }
                             }
                         } else {
                             Toast.makeText(context, "No documents available to compress", Toast.LENGTH_SHORT).show()
@@ -367,15 +379,19 @@ fun PdfToolsScreen(
                                     quality = PdfQuality.HIGH,
                                     watermarkText = "CONFIDENTIAL"
                                 )
-                                val wmDoc = repository.saveScanSession(
+                                val wmDoc = repository.saveScanSessionOrNull(
                                     title = config.filename,
                                     category = first.category,
                                     pages = pages,
                                     pdfConfig = config
                                 )
                                 isProcessing = false
-                                Toast.makeText(context, "Watermarked PDF created!", Toast.LENGTH_SHORT).show()
-                                onOpenDocument(wmDoc.id)
+                                if (wmDoc != null) {
+                                    Toast.makeText(context, "Watermarked PDF created!", Toast.LENGTH_SHORT).show()
+                                    onOpenDocument(wmDoc.id)
+                                } else {
+                                    Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
+                                }
                             }
                         } else {
                             Toast.makeText(context, "No documents available to watermark", Toast.LENGTH_SHORT).show()

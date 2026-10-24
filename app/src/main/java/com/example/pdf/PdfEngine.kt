@@ -2,6 +2,7 @@ package com.example.pdf
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -10,9 +11,11 @@ import android.graphics.pdf.PdfDocument
 import com.example.data.model.CapturedPage
 import com.example.data.model.PdfExportConfig
 import com.example.data.model.PdfPageSize
+import com.example.data.model.PdfQuality
 import com.example.imageprocessing.ImageProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.min
@@ -43,11 +46,17 @@ object PdfEngine {
 
                 // 1. Decode page image
                 val imageFile = File(page.localImagePath)
+                val (reqW, reqH) = when (config.quality) {
+                    PdfQuality.HIGH -> Pair(1600, 2200)
+                    PdfQuality.MEDIUM -> Pair(1240, 1754)
+                    PdfQuality.COMPRESSED -> Pair(900, 1250)
+                }
                 var rawBitmap = ImageProcessor.decodeSampledBitmap(
                     imageFile,
-                    reqWidth = 1600,
-                    reqHeight = 2200
+                    reqWidth = reqW,
+                    reqHeight = reqH
                 ) ?: continue
+                rawBitmap = reencodeJpeg(rawBitmap, config.quality.jpegQuality)
 
                 // 2. Apply rotation if specified
                 if (page.rotationDegrees != 0) {
@@ -171,6 +180,12 @@ object PdfEngine {
 
             // Validate temp file exists and has size
             if (tempFile.exists() && tempFile.length() > 0) {
+                PdfMetadata.apply(
+                    tempFile,
+                    title = config.documentTitle.ifBlank { config.filename },
+                    author = config.author,
+                    creator = "Artify Scanner"
+                )
                 outputFile.parentFile?.mkdirs()
                 if (outputFile.exists()) outputFile.delete()
                 tempFile.copyTo(outputFile, overwrite = true)
@@ -185,6 +200,21 @@ object PdfEngine {
             false
         } finally {
             pdfDocument.close()
+        }
+    }
+
+    /** Round-trips the bitmap through JPEG so the requested quality level shrinks the output. */
+    private fun reencodeJpeg(source: Bitmap, quality: Int): Bitmap {
+        if (quality >= 100) return source
+        return try {
+            val out = ByteArrayOutputStream()
+            source.compress(Bitmap.CompressFormat.JPEG, quality, out)
+            val bytes = out.toByteArray()
+            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return source
+            source.recycle()
+            decoded
+        } catch (e: OutOfMemoryError) {
+            source
         }
     }
 

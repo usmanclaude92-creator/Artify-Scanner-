@@ -156,7 +156,7 @@ fun DocumentReviewScreen(
                         else -> DocumentCategory.ALL
                     }
 
-                    val savedDoc = repository.saveScanSession(
+                    val savedDoc = repository.saveScanSessionOrNull(
                         title = config.filename,
                         category = category,
                         pages = pages.toList(),
@@ -164,8 +164,12 @@ fun DocumentReviewScreen(
                     )
 
                     isSavingDocument = false
-                    Toast.makeText(context, "PDF saved successfully! (1 file, ${pages.size} pages)", Toast.LENGTH_LONG).show()
-                    onOpenDocumentDetail(savedDoc.id)
+                    if (savedDoc != null) {
+                        Toast.makeText(context, "PDF saved successfully! (1 file, ${pages.size} pages)", Toast.LENGTH_LONG).show()
+                        onOpenDocumentDetail(savedDoc.id)
+                    } else {
+                        Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         )
