@@ -18,7 +18,7 @@ class BurstTrigger {
     data class Status(
         val phase: Phase = Phase.SEARCHING,
         val progress: Float = 0f,
-        val message: String = "Point at the first page"
+        val message: String = "Scanning..."
     )
 
     val status = mutableStateOf(Status())
@@ -55,7 +55,7 @@ class BurstTrigger {
         sawMovement = false
         prev = null
         phase = Phase.SEARCHING
-        publish(Phase.SEARCHING, 0f, "Point at the first page")
+        publish(Phase.SEARCHING, 0f, "Scanning...")
     }
 
     fun analyze(image: ImageProxy) {
@@ -72,13 +72,19 @@ class BurstTrigger {
             prev = sig
             if (before == null) return
             val motion = diff(before, sig)
+            // A dark frame (lens covered, no light) is never a page
+            if (sig.average() < MIN_LUMA) {
+                steadyTicks = 0
+                if (phase != Phase.TURN_PAGE) publish(Phase.SEARCHING, 0f, "Scanning...")
+                return
+            }
 
             if (phase == Phase.TURN_PAGE) {
                 if (motion >= TURN_MOTION) sawMovement = true
                 if (sawMovement && motion < STEADY_MOTION) {
                     phase = Phase.SEARCHING
                     steadyTicks = 0
-                    publish(Phase.SEARCHING, 0f, "Hold the next page steady")
+                    publish(Phase.SEARCHING, 0f, "Scanning... hold steady")
                 } else {
                     publish(Phase.TURN_PAGE, 0f, "Captured. Turn the page...")
                 }
@@ -88,7 +94,7 @@ class BurstTrigger {
             steadyTicks = if (motion < STEADY_MOTION) steadyTicks + 1 else 0
             if (steadyTicks == 0) {
                 phase = Phase.SEARCHING
-                publish(Phase.SEARCHING, 0f, "Hold steady...")
+                publish(Phase.SEARCHING, 0f, "Scanning... hold steady")
             } else if (steadyTicks >= NEEDED_TICKS) {
                 captureInFlight = true
                 phase = Phase.CAPTURING
@@ -96,7 +102,7 @@ class BurstTrigger {
                 main.post { onCaptureRequested?.invoke() }
             } else {
                 phase = Phase.HOLD
-                publish(Phase.HOLD, steadyTicks.toFloat() / NEEDED_TICKS, "Hold steady...")
+                publish(Phase.HOLD, steadyTicks.toFloat() / NEEDED_TICKS, "Scanning... hold steady")
             }
         } catch (e: Exception) {
             android.util.Log.w("Artify", "Burst analysis failed", e)
@@ -139,6 +145,7 @@ class BurstTrigger {
         const val TICK_MS = 140L
         const val NEEDED_TICKS = 7          // about 1 s without movement
         const val GRID = 24
+        const val MIN_LUMA = 45.0           // average brightness (0-255) needed before anything is captured
         const val STEADY_MOTION = 3f        // average brightness change between ticks that still counts as steady
         const val TURN_MOTION = 7f          // movement that proves the page was turned or moved away
     }
