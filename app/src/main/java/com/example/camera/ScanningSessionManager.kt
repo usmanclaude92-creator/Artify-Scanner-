@@ -142,7 +142,8 @@ object ScanningSessionManager {
         context: Context,
         rawBitmap: Bitmap,
         filter: ScanFilter = ScanFilter.MAGIC_COLOR,
-        autoCrop: Boolean = true
+        autoCrop: Boolean = true,
+        corners: NormalizedCornerPoints? = null
     ): CapturedPage = withContext(Dispatchers.IO) {
         isProcessingCapture.value = true
         statusMessage.value = "Enhancing document..."
@@ -159,10 +160,10 @@ object ScanningSessionManager {
             ImageProcessor.saveBitmapToFile(rawBitmap, originalFile, quality = 95)
 
             // 2. Detect corners and apply perspective & filter
-            val corners = if (autoCrop) ImageProcessor.detectDocumentCorners(rawBitmap) else NormalizedCornerPoints(
+            val pageCorners = corners ?: if (autoCrop) ImageProcessor.detectDocumentCorners(rawBitmap) else NormalizedCornerPoints(
                 PointF(0f, 0f), PointF(1f, 0f), PointF(1f, 1f), PointF(0f, 1f)
             )
-            correctedBitmap = ImageProcessor.applyPerspectiveCorrection(rawBitmap, corners)
+            correctedBitmap = ImageProcessor.applyPerspectiveCorrection(rawBitmap, pageCorners)
             filteredBitmap = ImageProcessor.applyFilter(correctedBitmap, filter)
 
             // 3. Save processed image
@@ -178,7 +179,7 @@ object ScanningSessionManager {
                 originalImagePath = originalFile.absolutePath,
                 pageIndex = capturedPages.size,
                 filter = filter,
-                cropPoints = corners,
+                cropPoints = pageCorners,
                 ocrText = ocr.text,
                 ocrLines = ocr.lines,
                 isProcessed = true

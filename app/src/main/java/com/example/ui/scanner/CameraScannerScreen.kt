@@ -4,6 +4,10 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.widget.Toast
+import com.example.ui.review.CropDialog
+import com.example.data.model.NormalizedCornerPoints
+import com.example.data.model.CapturedPage
+import android.graphics.PointF
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import com.example.imageprocessing.ImageProcessor
@@ -165,6 +169,21 @@ fun CameraScannerScreen(
     }
 
     var activeImageCapture: ImageCapture? by remember { mutableStateOf(null) }
+    var pendingCropPage by remember { mutableStateOf<CapturedPage?>(null) }
+
+    pendingCropPage?.let { page ->
+        CropDialog(
+            originalImagePath = page.originalImagePath,
+            initial = NormalizedCornerPoints(
+                PointF(0.04f, 0.04f), PointF(0.96f, 0.04f), PointF(0.96f, 0.96f), PointF(0.04f, 0.96f)
+            ),
+            onDismiss = { pendingCropPage = null },
+            onConfirm = { corners ->
+                pendingCropPage = null
+                ScanningSessionManager.updatePageCrop(context, scope, page.id, corners)
+            }
+        )
+    }
 
     fun captureFromCamera() {
         if (ScanningSessionManager.isProcessingCapture.value) return
@@ -179,7 +198,10 @@ fun CameraScannerScreen(
                             if (it !== photo) photo.recycle()
                         }
                     }
-                    ScanningSessionManager.addPageFromBitmap(context, guided)
+                    val detected = withContext(Dispatchers.Default) { ImageProcessor.detectDocumentCornersOrNull(guided) }
+                    val page = ScanningSessionManager.addPageFromBitmap(context, guided, autoCrop = false, corners = detected)
+                    // No confident outline: let the user place the corners instead of guessing
+                    if (detected == null) pendingCropPage = page
                 }
             },
             onError = { err -> Toast.makeText(context, err, Toast.LENGTH_SHORT).show() }

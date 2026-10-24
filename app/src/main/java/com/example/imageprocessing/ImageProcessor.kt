@@ -300,13 +300,17 @@ object ImageProcessor {
         bottomLeft = PointF(0f, 1f)
     )
 
+    /** Page corners, or the whole frame when no confident outline is found. */
+    fun detectDocumentCorners(bitmap: Bitmap): NormalizedCornerPoints =
+        detectDocumentCornersOrNull(bitmap) ?: fullFrame
+
     /**
-     * Finds the page outline with OpenCV (Canny edges, then the largest convex four-point contour).
-     * Returns the full frame when no confident quadrilateral exists, so nothing is ever cut off by a
-     * wrong guess.
+     * Finds the page outline with OpenCV. Strategy 1: Canny edges, then the largest convex four-point
+     * contour. Strategy 2: Otsu threshold of the bright paper region, then its hull. Returns null when
+     * neither gives a plausible quadrilateral, so callers can ask the user instead of guessing.
      */
-    fun detectDocumentCorners(bitmap: Bitmap): NormalizedCornerPoints {
-        if (bitmap.width < 32 || bitmap.height < 32 || !OpenCvSupport.ensureLoaded()) return fullFrame
+    fun detectDocumentCornersOrNull(bitmap: Bitmap): NormalizedCornerPoints? {
+        if (bitmap.width < 32 || bitmap.height < 32 || !OpenCvSupport.ensureLoaded()) return null
 
         val scale = min(1f, 800f / max(bitmap.width, bitmap.height))
         val w = max(32, (bitmap.width * scale).toInt())
@@ -315,20 +319,49 @@ object ImageProcessor {
 
         val rgba = Mat()
         val gray = Mat()
-        val edges = Mat()
-        val hierarchy = Mat()
-        val contours = ArrayList<MatOfPoint>()
         try {
             Utils.bitmapToMat(small, rgba)
             Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
             Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 0.0)
+            val frameArea = (small.width * small.height).toDouble()
+
+            val candidates = listOfNotNull(
+                quadFromEdges(gray, frameArea),
+                quadFromBrightRegion(gray, frameArea)
+            )
+            for (quad in candidates) {
+                val tl = quad.minByOrNull { it.x + it.y }!!
+                val br = quad.maxByOrNull { it.x + it.y }!!
+                val tr = quad.maxByOrNull { it.x - it.y }!!
+                val bl = quad.minByOrNull { it.x - it.y }!!
+                fun norm(p: org.opencv.core.Point) = PointF(
+                    (p.x / small.width).toFloat().coerceIn(0f, 1f),
+                    (p.y / small.height).toFloat().coerceIn(0f, 1f)
+                )
+                val result = NormalizedCornerPoints(norm(tl), norm(tr), norm(br), norm(bl))
+                if (isPlausibleQuad(result, bitmap.width, bitmap.height)) return result
+            }
+            return null
+        } catch (e: Exception) {
+            android.util.Log.w("Artify", "Edge detection failed", e)
+            return null
+        } finally {
+            rgba.release()
+            gray.release()
+            if (small !== bitmap) small.recycle()
+        }
+    }
+
+    private fun quadFromEdges(gray: Mat, frameArea: Double): Array<org.opencv.core.Point>? {
+        val edges = Mat()
+        val hierarchy = Mat()
+        val contours = ArrayList<MatOfPoint>()
+        try {
             Imgproc.Canny(gray, edges, 40.0, 130.0)
             val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
             Imgproc.dilate(edges, edges, kernel)
             kernel.release()
             Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
-
-            val frameArea = (small.width * small.height).toDouble()
             var best: Array<org.opencv.core.Point>? = null
             var bestArea = 0.0
             for (contour in contours) {
@@ -345,29 +378,56 @@ object ImageProcessor {
                 c2f.release()
                 approx.release()
             }
-            val quad = best ?: return fullFrame
-
-            // Order corners: TL = min(x+y), BR = max(x+y), TR = max(x-y), BL = min(x-y)
-            val tl = quad.minByOrNull { it.x + it.y }!!
-            val br = quad.maxByOrNull { it.x + it.y }!!
-            val tr = quad.maxByOrNull { it.x - it.y }!!
-            val bl = quad.minByOrNull { it.x - it.y }!!
-            fun norm(p: org.opencv.core.Point) = PointF(
-                (p.x / small.width).toFloat().coerceIn(0f, 1f),
-                (p.y / small.height).toFloat().coerceIn(0f, 1f)
-            )
-            val result = NormalizedCornerPoints(norm(tl), norm(tr), norm(br), norm(bl))
-            return if (isPlausibleQuad(result, bitmap.width, bitmap.height)) result else fullFrame
-        } catch (e: Exception) {
-            android.util.Log.w("Artify", "Edge detection failed", e)
-            return fullFrame
+            return best
         } finally {
-            rgba.release()
-            gray.release()
             edges.release()
             hierarchy.release()
             contours.forEach { it.release() }
-            if (small !== bitmap) small.recycle()
+        }
+    }
+
+    private fun quadFromBrightRegion(gray: Mat, frameArea: Double): Array<org.opencv.core.Point>? {
+        val bw = Mat()
+        val hierarchy = Mat()
+        val contours = ArrayList<MatOfPoint>()
+        try {
+            Imgproc.threshold(gray, bw, 0.0, 255.0, Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU)
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(9.0, 9.0))
+            Imgproc.morphologyEx(bw, bw, Imgproc.MORPH_CLOSE, kernel)
+            Imgproc.morphologyEx(bw, bw, Imgproc.MORPH_OPEN, kernel)
+            kernel.release()
+            Imgproc.findContours(bw, contours, hierarchy, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE)
+            val largest = contours.maxByOrNull { Imgproc.contourArea(it) } ?: return null
+            val area = Imgproc.contourArea(largest)
+            if (area < frameArea * 0.25 || area > frameArea * 0.97) return null
+
+            val hullIdx = org.opencv.core.MatOfInt()
+            Imgproc.convexHull(largest, hullIdx)
+            val pts = largest.toArray()
+            val hull = hullIdx.toArray().map { pts[it] }.toTypedArray()
+            hullIdx.release()
+            val hull2f = MatOfPoint2f(*hull)
+            val perimeter = Imgproc.arcLength(hull2f, true)
+            for (eps in doubleArrayOf(0.02, 0.03, 0.04, 0.06)) {
+                val approx = MatOfPoint2f()
+                Imgproc.approxPolyDP(hull2f, approx, eps * perimeter, true)
+                val approxPts = approx.toArray()
+                approx.release()
+                if (approxPts.size == 4) {
+                    hull2f.release()
+                    return approxPts
+                }
+            }
+            // Fall back to the tightest rotated rectangle around the region
+            val rect = Imgproc.minAreaRect(hull2f)
+            hull2f.release()
+            val box = Array(4) { org.opencv.core.Point() }
+            rect.points(box)
+            return box
+        } finally {
+            bw.release()
+            hierarchy.release()
+            contours.forEach { it.release() }
         }
     }
 
