@@ -281,7 +281,7 @@ fun DocumentsScreen(
                 }
             } else {
                 items(sortedDocs, key = { it.id }) { doc ->
-                    Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp)) {
+                    Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 3.dp)) {
                         DocumentCardItem(
                             document = doc,
                             onClick = { onOpenDocument(doc.id) },

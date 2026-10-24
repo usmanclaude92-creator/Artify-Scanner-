@@ -316,7 +316,7 @@ fun HomeScreen(
             item { EmptyDocumentsView(message = "No documents yet. Tap Scan Document!") }
         } else {
             items(documents, key = { it.id }) { doc ->
-                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp)) {
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 3.dp)) {
                     DocumentCardItem(
                         document = doc,
                         onClick = { onOpenDocument(doc.id) },

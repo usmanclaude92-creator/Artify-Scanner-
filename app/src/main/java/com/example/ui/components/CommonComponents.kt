@@ -89,7 +89,7 @@ fun DocumentCardItem(
             .fillMaxWidth()
             .testTag("doc_card_${document.id}")
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -99,14 +99,14 @@ fun DocumentCardItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
+                .padding(start = 8.dp, top = 8.dp, bottom = 8.dp, end = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Document Thumbnail with PDF badge
+            // Document thumbnail with page-count tag
             Box(
                 modifier = Modifier
-                    .size(width = 68.dp, height = 86.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .size(width = 44.dp, height = 56.dp)
+                    .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 if (document.thumbnailPath.isNotBlank() && File(document.thumbnailPath).exists()) {
@@ -125,32 +125,30 @@ fun DocumentCardItem(
                             imageVector = Icons.Default.PictureAsPdf,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
 
-                // Page count tag
                 Surface(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(4.dp),
+                        .padding(2.dp),
                     color = Color.Black.copy(alpha = 0.75f),
-                    shape = RoundedCornerShape(4.dp)
+                    shape = RoundedCornerShape(3.dp)
                 ) {
                     Text(
                         text = "${document.pageCount}p",
                         color = Color.White,
-                        fontSize = 10.sp,
+                        fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
-            // Metadata Column
             Column(
                 modifier = Modifier.weight(1f)
             ) {
@@ -158,68 +156,65 @@ fun DocumentCardItem(
                     text = document.title,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp
+                        fontSize = 14.sp
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Surface(
                         color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(6.dp)
+                        shape = RoundedCornerShape(5.dp)
                     ) {
                         Text(
                             text = document.category.displayName,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                         )
                     }
 
                     Text(
-                        text = formattedDate,
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "$formattedDate \u2022 $formattedSize",
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = "PDF • $formattedSize",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                )
             }
 
             // Quick Actions: Favorite & Overflow Menu
             IconButton(
                 onClick = onToggleFavorite,
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier.size(32.dp)
             ) {
                 Icon(
                     imageVector = if (document.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "Favorite",
-                    tint = if (document.isFavorite) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = if (document.isFavorite) Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
 
             Box {
                 IconButton(
                     onClick = { menuExpanded = true },
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "Options",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
