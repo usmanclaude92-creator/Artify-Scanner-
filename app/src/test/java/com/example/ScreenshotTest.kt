@@ -1,0 +1,107 @@
+package com.example
+
+import android.content.Context
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.test.core.app.ApplicationProvider
+import com.example.data.model.DocumentCategory
+import com.example.data.model.ScannedDocumentItem
+import com.example.data.repository.DocumentRepository
+import com.example.ui.ai.AiAssistantScreen
+import com.example.ui.components.DocumentCardItem
+import com.example.ui.home.HomeScreen
+import com.example.ui.settings.SettingsScreen
+import com.example.ui.splash.SplashScreen
+import com.example.ui.theme.ArtifyScannerTheme
+import com.example.ui.tools.PdfToolsScreen
+import com.example.ui.viewer.DocumentInfoTab
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
+import java.io.FileOutputStream
+
+/**
+ * Renders the main screens on the JVM and writes PNGs to build/screenshots so layout can be reviewed
+ * without a device. It never fails the build: problems are written to <name>.error.txt instead.
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34], qualifiers = "w411dp-h891dp-xxhdpi")
+class ScreenshotTest {
+
+    @get:Rule
+    val rule = createComposeRule()
+
+    private val outDir = File("build/screenshots").apply { mkdirs() }
+
+    private fun shot(name: String, dark: Boolean, content: @Composable () -> Unit) {
+        try {
+            rule.setContent {
+                ArtifyScannerTheme(darkTheme = dark) {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
+                }
+            }
+            rule.waitForIdle()
+            val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+            FileOutputStream(File(outDir, "$name.png")).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        } catch (t: Throwable) {
+            File(outDir, "$name.error.txt").writeText(t.stackTraceToString())
+        }
+    }
+
+    private val repo get() = DocumentRepository(ApplicationProvider.getApplicationContext<Context>())
+
+    private val sampleDoc = ScannedDocumentItem(
+        id = "1", title = "Invoice - Acme Cloud Solutions", createdAt = 0, updatedAt = 1_760_000_000_000,
+        pageCount = 2, category = DocumentCategory.INVOICES, isFavorite = true, pdfFilePath = "", thumbnailPath = "",
+        fileSizeBytes = 1_250_000, tags = listOf("Invoice", "Work", "ACME")
+    )
+
+    @Test fun splash() = shot("splash", true) { SplashScreen() }
+
+    @Test fun homeLight() = shot("home_light", false) {
+        HomeScreen(repo, {}, {}, {}, {})
+    }
+
+    @Test fun homeDark() = shot("home_dark", true) {
+        HomeScreen(repo, {}, {}, {}, {})
+    }
+
+    @Test fun toolsLight() = shot("tools_light", false) { PdfToolsScreen(repo) {} }
+
+    @Test fun toolsDark() = shot("tools_dark", true) { PdfToolsScreen(repo) {} }
+
+    @Test fun settingsLight() = shot("settings_light", false) { SettingsScreen() }
+
+    @Test fun settingsDark() = shot("settings_dark", true) { SettingsScreen() }
+
+    @Test fun aiLight() = shot("ai_light", false) { AiAssistantScreen(repo) }
+
+    @Test fun detailsLight() = shot("details_light", false) {
+        DocumentInfoTab(sampleDoc, {}, {}, {}, {})
+    }
+
+    @Test fun detailsDark() = shot("details_dark", true) {
+        DocumentInfoTab(sampleDoc, {}, {}, {}, {})
+    }
+
+    @Test fun docCardsLight() = shot("doc_cards_light", false) {
+        androidx.compose.foundation.layout.Column(Modifier.padding(16.dp)) {
+            DocumentCardItem(sampleDoc, {}, {}, {}, {}, {}, {})
+        }
+    }
+
+}
