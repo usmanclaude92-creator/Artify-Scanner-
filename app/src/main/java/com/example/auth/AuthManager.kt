@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.credentials.CredentialManager
 import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.gms.tasks.Task
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -16,6 +18,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.auth.userProfileChangeRequest
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
@@ -120,11 +123,38 @@ object AuthManager {
 
     suspend fun signInWithGoogle(activity: Activity): Result<Unit> = runCatching {
         check(isConfigured(activity)) { NOT_CONFIGURED }
+        val auth = FirebaseAuth.getInstance()
         val resId = activity.resources.getIdentifier("default_web_client_id", "string", activity.packageName)
-        check(resId != 0) { "Google sign-in needs the Web client ID from google-services.json." }
+
+        var user: FirebaseUser? = null
+        if (resId != 0) {
+            // Fast route: the Google account picker on the phone (needs the Web client ID from google-services.json)
+            try {
+                user = signInWithCredentialManager(activity, auth, activity.getString(resId))
+            } catch (e: GetCredentialCancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.w("AuthManager", "Credential Manager sign-in failed, trying browser route", e)
+            }
+        }
+        if (user == null) {
+            // Fallback route: Firebase's own Google sign-in page; works without the Web client ID
+            val provider = OAuthProvider.newBuilder("google.com")
+                .setScopes(listOf("email", "profile"))
+                .build()
+            val result = (auth.pendingAuthResult ?: auth.startActivityForSignInWithProvider(activity, provider)).awaitResult()
+            user = result.user
+        }
+        val signedIn = user ?: error("Sign-in failed")
+        prefs(activity).edit().putBoolean("guest", false).apply()
+        profile.value = fromFirebase(activity.applicationContext, signedIn)
+        welcomeOnce(activity.applicationContext)
+    }.mapError()
+
+    private suspend fun signInWithCredentialManager(activity: Activity, auth: FirebaseAuth, webClientId: String): FirebaseUser? {
         val option = GetGoogleIdOption.Builder()
             .setFilterByAuthorizedAccounts(false)
-            .setServerClientId(activity.getString(resId))
+            .setServerClientId(webClientId)
             .build()
         val request = GetCredentialRequest.Builder().addCredentialOption(option).build()
         val credential = CredentialManager.create(activity).getCredential(activity, request).credential
@@ -132,13 +162,8 @@ object AuthManager {
             "Unexpected sign-in response"
         }
         val google = GoogleIdTokenCredential.createFrom(credential.data)
-        val result = FirebaseAuth.getInstance()
-            .signInWithCredential(GoogleAuthProvider.getCredential(google.idToken, null)).awaitResult()
-        val user = result.user ?: error("Sign-in failed")
-        prefs(activity).edit().putBoolean("guest", false).apply()
-        profile.value = fromFirebase(activity.applicationContext, user)
-        welcomeOnce(activity.applicationContext)
-    }.mapError()
+        return auth.signInWithCredential(GoogleAuthProvider.getCredential(google.idToken, null)).awaitResult().user
+    }
 
     suspend fun sendPasswordReset(context: Context, email: String): Result<Unit> = runCatching {
         check(isConfigured(context)) { NOT_CONFIGURED }
@@ -210,14 +235,21 @@ object AuthManager {
         onFailure = { Result.failure(IllegalStateException(friendly(it))) }
     )
 
-    private fun friendly(e: Throwable): String = when ((e as? FirebaseAuthException)?.errorCode) {
+    private fun friendly(e: Throwable): String = when {
+        e is GetCredentialCancellationException -> "Sign-in was cancelled."
+        e is NoCredentialException -> "No Google account found on this phone. Add one in the phone settings and try again."
+        else -> friendlyFirebase(e)
+    }
+
+    private fun friendlyFirebase(e: Throwable): String = when ((e as? FirebaseAuthException)?.errorCode) {
         "ERROR_INVALID_EMAIL" -> "That email address looks wrong."
         "ERROR_WRONG_PASSWORD", "ERROR_INVALID_CREDENTIAL" -> "Wrong email or password."
         "ERROR_USER_NOT_FOUND" -> "No account with that email. Try signing up."
         "ERROR_EMAIL_ALREADY_IN_USE" -> "An account with this email already exists. Try logging in."
         "ERROR_WEAK_PASSWORD" -> "Choose a stronger password (at least 6 characters)."
         "ERROR_NETWORK_REQUEST_FAILED" -> "No internet connection."
-        else -> e.message?.takeIf { it.isNotBlank() } ?: "Something went wrong. Please try again."
+        "ERROR_OPERATION_NOT_ALLOWED" -> "This sign-in method is not enabled in Firebase yet (Authentication > Sign-in method)."
+        else -> "${e.javaClass.simpleName}: ${e.message?.takeIf { it.isNotBlank() } ?: "something went wrong"}"
     }
 
     private suspend fun <T> Task<T>.awaitResult(): T = suspendCancellableCoroutine { cont ->
