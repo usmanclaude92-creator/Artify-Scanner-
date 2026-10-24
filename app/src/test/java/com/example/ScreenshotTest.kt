@@ -19,6 +19,10 @@ import com.example.data.model.ScannedDocumentItem
 import com.example.data.repository.DocumentRepository
 import com.example.ui.ai.AiAssistantScreen
 import com.example.ui.components.DocumentCardItem
+import com.example.ui.auth.AuthScreen
+import com.example.ui.components.AppHeader
+import com.example.ui.profile.ProfileScreen
+import com.example.ui.scan.ScanIntroScreen
 import com.example.ui.home.HomeScreen
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.splash.SplashScreen
@@ -86,14 +90,30 @@ class ScreenshotTest {
         fileSizeBytes = 1_250_000, tags = listOf("Invoice", "Work", "ACME")
     )
 
-    @Test fun splash() = shot("splash", true) { SplashScreen() }
+    @Test fun splash() = shot("splash", true) { SplashScreen(showActions = true) }
+
+    @Test fun authSignUp() = shot("auth_signup", false) {
+        AuthScreen(true, false, { _, _, _ -> null }, { _, _ -> null }, { null }, { null }, {}, {})
+    }
+
+    @Test fun authLoginDark() = shot("auth_login_dark", true) {
+        AuthScreen(false, true, { _, _, _ -> null }, { _, _ -> null }, { null }, { null }, {}, {})
+    }
+
+    @Test fun scanIntro() = shot("scan_intro", true) { ScanIntroScreen({}, {}) }
+
+    @Test fun headerLight() = shot("header_light", false) { AppHeader({}) }
+
+    @Test fun headerDark() = shot("header_dark", true) { AppHeader({}) }
+
+    @Test fun profileLight() = shot("profile_light", false) { ProfileScreen(repo, {}, {}) }
 
     @Test fun homeLight() = shot("home_light", false) {
-        HomeScreen(repo, {}, {}, {}, {})
+        HomeScreen(repo, {}, {}, {}, {}, {})
     }
 
     @Test fun homeDark() = shot("home_dark", true) {
-        HomeScreen(repo, {}, {}, {}, {})
+        HomeScreen(repo, {}, {}, {}, {}, {})
     }
 
     @Test fun toolsLight() = shot("tools_light", false) { PdfToolsScreen(repo) {} }

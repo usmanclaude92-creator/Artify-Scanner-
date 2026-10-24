@@ -2,12 +2,14 @@ package com.example.ui.splash
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,7 +36,11 @@ import com.example.ui.theme.InterFamily
 
 /** Dark-blue brand splash shown for a moment when the app starts. */
 @Composable
-fun SplashScreen() {
+fun SplashScreen(
+    showActions: Boolean = false,
+    onGetStarted: () -> Unit = {},
+    onHaveAccount: () -> Unit = {}
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -66,22 +72,48 @@ fun SplashScreen() {
             )
         }
         Column(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 56.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 28.dp).padding(bottom = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                "Your documents,\nperfectly captured.",
-                color = Color(0xFF9FB4DD),
-                fontFamily = InterFamily,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
-            Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Box(Modifier.width(22.dp).height(5.dp).clip(CircleShape).background(BrandCyan))
-                Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF2B4A85)))
-                Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF2B4A85)))
+            if (showActions) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Brush.horizontalGradient(listOf(Color(0xFF1E6BFF), Color(0xFF2AA5FF))))
+                        .clickable(onClick = onGetStarted),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Get Started", color = Color.White, fontFamily = InterFamily, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+                Spacer(Modifier.height(14.dp))
+                Row {
+                    Text("Already have an account? ", color = Color(0xFF9FB4DD), fontFamily = InterFamily, fontSize = 14.sp)
+                    Text(
+                        "Log in",
+                        color = BrandCyan,
+                        fontFamily = InterFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable(onClick = onHaveAccount)
+                    )
+                }
+            } else {
+                Text(
+                    "Your documents,\nperfectly captured.",
+                    color = Color(0xFF9FB4DD),
+                    fontFamily = InterFamily,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Box(Modifier.width(22.dp).height(5.dp).clip(CircleShape).background(BrandCyan))
+                    Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF2B4A85)))
+                    Box(Modifier.size(5.dp).clip(CircleShape).background(Color(0xFF2B4A85)))
+                }
             }
         }
     }

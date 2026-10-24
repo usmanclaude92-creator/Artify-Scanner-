@@ -10,6 +10,7 @@ import com.example.ui.theme.BrandOrange
 import com.example.ui.theme.BrandGreen
 import com.example.ui.theme.BrandBlue
 import com.example.ui.components.ActionCard
+import com.example.ui.components.ScreenTitle
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.foundation.layout.Box
@@ -128,46 +129,6 @@ fun AiAssistantScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF0284C7)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "AI Assistant",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        messages.clear()
-                        messages.add(
-                            ChatMessage(
-                                isUser = false,
-                                text = "Conversation reset. Select a document and ask any questions."
-                            )
-                        )
-                    }) {
-                        Icon(Icons.Default.Clear, contentDescription = "Clear History")
-                    }
-                }
-            )
-        }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -175,6 +136,24 @@ fun AiAssistantScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { ScreenTitle("AI Assistant", "Smarter ways to work with your documents") }
+                IconButton(
+                    onClick = {
+                        messages.clear()
+                        messages.add(
+                            ChatMessage(
+                                isUser = false,
+                                text = "Conversation reset. Select a document and ask any questions."
+                            )
+                        )
+                    },
+                    modifier = Modifier.padding(end = 12.dp)
+                ) {
+                    Icon(Icons.Default.Clear, contentDescription = "Clear History")
+                }
+            }
+
             // Selected Document Selector Pill
             Surface(
                 modifier = Modifier

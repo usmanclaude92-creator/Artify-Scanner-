@@ -26,7 +26,6 @@ enum class ScanMode(val title: String, val subtitle: String) {
     RECEIPT_INVOICE("Receipt & Invoice", "OCR & structured expense parsing"),
     ID_CARD("ID Card", "Front & Back combined on single sheet"),
     BURST_SCAN("Burst Scan", "Hands-free capture, page after page"),
-    WIDE_CAMERA("Wide Camera", "Ultra-wide manual capture")
 }
 
 enum class PdfPageSize(val displayName: String, val widthPt: Int, val heightPt: Int) {

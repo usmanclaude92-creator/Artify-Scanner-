@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Info
@@ -58,10 +59,9 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onOpenProfile: () -> Unit = {}) {
     val context = LocalContext.current
 
-    var autoCaptureEnabled by remember { ScanningSessionManager.isAutoCapture }
     var appLockEnabled by remember { mutableStateOf(AppLock.isEnabled(context)) }
 
     fun calculateCacheSize(): String {
@@ -90,6 +90,35 @@ fun SettingsScreen() {
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item { ScreenTitle("Settings", "Customize your experience", horizontalPadding = 0.dp) }
+
+            // Profile
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+                        .clickable(onClick = onOpenProfile)
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    com.example.ui.components.UserAvatar(size = 56.dp, fontSize = 22)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            com.example.auth.AuthManager.profile.value?.name ?: "Artify User",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            com.example.auth.AuthManager.profile.value?.email ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Open profile", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
 
             // Appearance
             item {
@@ -126,10 +155,10 @@ fun SettingsScreen() {
                 }
             }
 
-            // Scanner Preferences
+            // Scanning
             item {
                 Text(
-                    text = "Scanner & Camera",
+                    text = "Scanning",
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -145,100 +174,15 @@ fun SettingsScreen() {
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Auto-Capture Mode",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                                )
-                                Text(
-                                    text = "Automatically capture page when document is stable in viewfinder",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = autoCaptureEnabled,
-                                onCheckedChange = {
-                                    autoCaptureEnabled = it
-                                    ScanningSessionManager.isAutoCapture.value = it
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Confirm crop after capture",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                            )
-                            Text(
-                                text = "Open the corner editor after each shot. Detected edges pre-place the corners; drag to fine-tune. Turn off to crop automatically when edges are found.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = ScanningSessionManager.confirmCropAfterCapture.value,
-                            onCheckedChange = { ScanningSessionManager.setConfirmCrop(context, it) }
-                        )
-                    }
-                }
-            }
-
-            item {
-                var diagnostics by remember { mutableStateOf<String?>(null) }
-                Card(
-                    modifier = Modifier.fillMaxWidth().clickable { diagnostics = com.example.camera.LensDiagnostics.describe(context) },
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Google document scanner", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+                        Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "Camera diagnostics",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                        )
-                        Text(
-                            text = "Tap to list the cameras and lenses this phone exposes to apps (useful when the ultra-wide lens is missing).",
+                            "Pages are captured with Google's camera. Choose Manual or Auto capture at the bottom of the camera. " +
+                                "Detected edges, crop, rotation and clean-up happen inside it, and you can still adjust pages here afterwards.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-                diagnostics?.let { text ->
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { diagnostics = null },
-                        title = { Text("Camera diagnostics") },
-                        text = {
-                            androidx.compose.foundation.text.selection.SelectionContainer {
-                                Text(text, style = MaterialTheme.typography.bodySmall)
-                            }
-                        },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = { diagnostics = null }) { Text("Close") }
-                        }
-                    )
                 }
             }
 

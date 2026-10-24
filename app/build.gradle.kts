@@ -19,9 +19,6 @@ android {
     versionCode = 1
     versionName = "1.0"
 
-    // OpenCV ships native libs for every ABI; keep phone architectures only
-    ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
-
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -92,10 +89,6 @@ dependencies {
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.appcompat)
   implementation(libs.androidx.biometric)
-  implementation(libs.androidx.camera.camera2)
-  implementation(libs.androidx.camera.core)
-  implementation(libs.androidx.camera.lifecycle)
-  implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
@@ -113,8 +106,11 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.mlkit.text.recognition)
   implementation(libs.mlkit.document.scanner)
-  implementation(libs.opencv)
   implementation(libs.firebase.ai)
+  implementation(libs.firebase.auth)
+  implementation(libs.androidx.credentials)
+  implementation(libs.androidx.credentials.play.services)
+  implementation(libs.googleid)
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
 

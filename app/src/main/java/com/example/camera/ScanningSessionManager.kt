@@ -152,7 +152,7 @@ object ScanningSessionManager {
         context: Context,
         rawBitmap: Bitmap,
         filter: ScanFilter = ScanFilter.MAGIC_COLOR,
-        autoCrop: Boolean = true,
+        autoCrop: Boolean = false,
         corners: NormalizedCornerPoints? = null
     ): CapturedPage = withContext(Dispatchers.IO) {
         isProcessingCapture.value = true
@@ -170,7 +170,7 @@ object ScanningSessionManager {
             ImageProcessor.saveBitmapToFile(rawBitmap, originalFile, quality = 95)
 
             // 2. Detect corners and apply perspective & filter
-            val pageCorners = corners ?: if (autoCrop) ImageProcessor.detectDocumentCorners(rawBitmap) else NormalizedCornerPoints(
+            val pageCorners = corners ?: NormalizedCornerPoints(
                 PointF(0f, 0f), PointF(1f, 0f), PointF(1f, 1f), PointF(0f, 1f)
             )
             correctedBitmap = ImageProcessor.applyPerspectiveCorrection(rawBitmap, pageCorners)
@@ -225,7 +225,7 @@ object ScanningSessionManager {
         context: Context,
         uri: Uri,
         filter: ScanFilter = ScanFilter.MAGIC_COLOR,
-        autoCrop: Boolean = true
+        autoCrop: Boolean = false
     ): CapturedPage? = withContext(Dispatchers.IO) {
         // Copy to a temp file first so large photos can be decoded down-sampled
         val temp = File(context.cacheDir, "import_${UUID.randomUUID()}.tmp")

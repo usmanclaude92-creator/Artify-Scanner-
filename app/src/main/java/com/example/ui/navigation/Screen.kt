@@ -6,7 +6,8 @@ sealed class Screen(val route: String) {
     object Tools : Screen("tools")
     object AiAssistant : Screen("ai_assistant")
     object Settings : Screen("settings")
-    object CameraScanner : Screen("camera_scanner")
+    object ScanIntro : Screen("scan_intro")
+    object Profile : Screen("profile")
     object DocumentReview : Screen("document_review")
     object DocumentDetail : Screen("document_detail/{documentId}") {
         fun createRoute(documentId: String) = "document_detail/$documentId"

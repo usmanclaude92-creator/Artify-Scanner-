@@ -2,69 +2,86 @@ package com.example
 
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.fragment.app.FragmentActivity
-import com.example.security.AppLock
-import com.example.ui.splash.SplashScreen
-import com.example.ui.theme.ThemeController
-import com.example.ui.security.LockScreen
-import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.auth.AuthManager
+import com.example.auth.NotificationCenter
+import com.example.camera.MlKitScanner
 import com.example.camera.ScanningSessionManager
+import com.example.data.model.ScanFilter
 import com.example.data.model.ScanMode
 import com.example.data.repository.DocumentRepository
+import com.example.security.AppLock
 import com.example.ui.ai.AiAssistantScreen
+import com.example.ui.auth.AuthScreen
+import com.example.ui.components.AppHeader
 import com.example.ui.documents.DocumentsScreen
 import com.example.ui.home.HomeScreen
 import com.example.ui.navigation.Screen
+import com.example.ui.profile.ProfileScreen
 import com.example.ui.review.DocumentReviewScreen
-import com.example.ui.scanner.CameraScannerScreen
+import com.example.ui.scan.ScanIntroScreen
+import com.example.ui.security.LockScreen
 import com.example.ui.settings.SettingsScreen
+import com.example.ui.splash.SplashScreen
 import com.example.ui.theme.ArtifyScannerTheme
+import com.example.ui.theme.ThemeController
 import com.example.ui.tools.PdfToolsScreen
 import com.example.ui.viewer.DocumentDetailScreen
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class BottomNavItem(
     val route: String,
@@ -73,6 +90,8 @@ data class BottomNavItem(
     val unselectedIcon: ImageVector,
     val testTag: String
 )
+
+private enum class Stage { SPLASH, AUTH, APP }
 
 class MainActivity : FragmentActivity() {
     /** Hides document content from screenshots and the recents screen while App Lock is on. */
@@ -101,26 +120,61 @@ class MainActivity : FragmentActivity() {
         applySecureFlag()
         enableEdgeToEdge()
         ThemeController.init(this)
-        val showSplashAtStart = savedInstanceState == null
+        AuthManager.init(this)
+        NotificationCenter.init(this)
+        val startAtSplash = savedInstanceState == null
         setContent {
             ArtifyScannerTheme {
-                var showSplash by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(showSplashAtStart) }
-                LaunchedEffect(Unit) {
-                    kotlinx.coroutines.delay(1400)
-                    showSplash = false
-                }
-                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize()) {
                     if (AppLock.locked.value) {
                         LockScreen(activity = this@MainActivity)
                     } else {
-                        ArtifyScannerApp()
+                        AppRoot(activity = this@MainActivity, startAtSplash = startAtSplash)
                     }
-                    AnimatedVisibility(
-                        visible = showSplash,
-                        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(350))
-                    ) { SplashScreen() }
                 }
             }
+        }
+    }
+}
+
+/** Splash -> (Get Started) -> sign up / log in -> app. A signed-in user passes the splash on its own. */
+@Composable
+private fun AppRoot(activity: FragmentActivity, startAtSplash: Boolean) {
+    val context = LocalContext.current
+    val profile = AuthManager.profile.value
+    var stage by remember { mutableStateOf(if (startAtSplash || profile == null) Stage.SPLASH else Stage.APP) }
+    var startInSignUp by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        delay(1800)
+        if (AuthManager.profile.value != null && stage == Stage.SPLASH) stage = Stage.APP
+    }
+    LaunchedEffect(profile) {
+        if (profile != null && stage == Stage.AUTH) stage = Stage.APP
+        if (profile == null && stage == Stage.APP) stage = Stage.AUTH
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        when (stage) {
+            Stage.APP -> ArtifyScannerApp()
+            Stage.AUTH -> AuthScreen(
+                startInSignUp = startInSignUp,
+                configured = AuthManager.isConfigured(context),
+                onEmailSignUp = { name, email, pass -> AuthManager.signUpWithEmail(context, name, email, pass).exceptionOrNull()?.message },
+                onEmailLogin = { email, pass -> AuthManager.signInWithEmail(context, email, pass).exceptionOrNull()?.message },
+                onGoogle = { AuthManager.signInWithGoogle(activity).exceptionOrNull()?.message },
+                onForgotPassword = { email -> AuthManager.sendPasswordReset(context, email).exceptionOrNull()?.message },
+                onGuest = { AuthManager.continueAsGuest(context) },
+                onBack = { stage = Stage.SPLASH }
+            )
+            Stage.SPLASH -> Unit
+        }
+        AnimatedVisibility(visible = stage == Stage.SPLASH, exit = fadeOut(tween(300))) {
+            SplashScreen(
+                showActions = profile == null,
+                onGetStarted = { startInSignUp = true; stage = Stage.AUTH },
+                onHaveAccount = { startInSignUp = false; stage = Stage.AUTH }
+            )
         }
     }
 }
@@ -130,6 +184,7 @@ fun ArtifyScannerApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
     val repository = remember { DocumentRepository(context) }
+    val scope = rememberCoroutineScope()
 
     // Seed realistic guide & sample documents on first startup
     LaunchedEffect(Unit) {
@@ -137,22 +192,19 @@ fun ArtifyScannerApp() {
         repository.seedSampleDocumentsIfEmpty()
     }
 
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-
-    // Google ML Kit Document Scanner is the default scanner; its cropped pages join the session
-    val googleScannerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        val scan = com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+    // Google's document scanner is the camera for every scan mode; its cropped pages join the session
+    val googleScannerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val scan = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
         if (result.resultCode == android.app.Activity.RESULT_OK && scan != null) {
-            if (navController.currentBackStackEntry?.destination?.route != Screen.DocumentReview.route) {
-                navController.navigate(Screen.DocumentReview.route)
+            val route = navController.currentBackStackEntry?.destination?.route
+            if (route != Screen.DocumentReview.route) {
+                navController.navigate(Screen.DocumentReview.route) {
+                    if (route == Screen.ScanIntro.route) popUpTo(Screen.ScanIntro.route) { inclusive = true }
+                }
             }
             scope.launch {
                 for (page in scan.pages.orEmpty()) {
-                    ScanningSessionManager.addPageFromUri(
-                        context, page.imageUri, com.example.data.model.ScanFilter.ORIGINAL, autoCrop = false
-                    )
+                    ScanningSessionManager.addPageFromUri(context, page.imageUri, ScanFilter.ORIGINAL)
                 }
             }
         }
@@ -160,10 +212,10 @@ fun ArtifyScannerApp() {
 
     fun launchGoogleScanner(maxPages: Int) {
         val activity = context as? android.app.Activity ?: return
-        com.example.camera.MlKitScanner.createIntentSender(
+        MlKitScanner.createIntentSender(
             activity = activity,
             maxPages = maxPages,
-            onReady = { googleScannerLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) },
+            onReady = { googleScannerLauncher.launch(IntentSenderRequest.Builder(it).build()) },
             onError = { android.widget.Toast.makeText(context, "Google scanner unavailable: $it", android.widget.Toast.LENGTH_LONG).show() }
         )
     }
@@ -172,57 +224,27 @@ fun ArtifyScannerApp() {
     val currentRoute = navBackStackEntry?.destination?.route
 
     val bottomNavItems = listOf(
-        BottomNavItem(
-            route = Screen.Home.route,
-            label = "Home",
-            selectedIcon = Icons.Filled.Home,
-            unselectedIcon = Icons.Outlined.Home,
-            testTag = "nav_home"
-        ),
-        BottomNavItem(
-            route = Screen.Documents.route,
-            label = "Documents",
-            selectedIcon = Icons.Filled.Description,
-            unselectedIcon = Icons.Outlined.Description,
-            testTag = "nav_documents"
-        ),
-        BottomNavItem(
-            route = Screen.Tools.route,
-            label = "Tools",
-            selectedIcon = Icons.Filled.Build,
-            unselectedIcon = Icons.Outlined.Build,
-            testTag = "nav_tools"
-        ),
-        BottomNavItem(
-            route = Screen.AiAssistant.route,
-            label = "AI Assistant",
-            selectedIcon = Icons.Filled.AutoAwesome,
-            unselectedIcon = Icons.Outlined.AutoAwesome,
-            testTag = "nav_ai_assistant"
-        ),
-        BottomNavItem(
-            route = Screen.Settings.route,
-            label = "Settings",
-            selectedIcon = Icons.Filled.Settings,
-            unselectedIcon = Icons.Outlined.Settings,
-            testTag = "nav_settings"
-        )
+        BottomNavItem(Screen.Home.route, "Home", Icons.Filled.Home, Icons.Outlined.Home, "nav_home"),
+        BottomNavItem(Screen.Documents.route, "Documents", Icons.Filled.Description, Icons.Outlined.Description, "nav_documents"),
+        BottomNavItem(Screen.Tools.route, "Tools", Icons.Filled.GridView, Icons.Outlined.GridView, "nav_tools"),
+        BottomNavItem(Screen.AiAssistant.route, "AI Assistant", Icons.Filled.AutoAwesome, Icons.Outlined.AutoAwesome, "nav_ai_assistant"),
+        BottomNavItem(Screen.Settings.route, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings, "nav_settings")
     )
 
-    // Hide bottom navigation on camera scanner and review screens for immersive full-screen UX
-    val isBottomBarVisible = currentRoute in listOf(
-        Screen.Home.route,
-        Screen.Documents.route,
-        Screen.Tools.route,
-        Screen.AiAssistant.route,
-        Screen.Settings.route
-    )
+    // Header and footer only on the five main tabs
+    val isMainTab = currentRoute in bottomNavItems.map { it.route }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = {
+            AnimatedVisibility(visible = isMainTab) {
+                AppHeader(onOpenProfile = { navController.navigate(Screen.Profile.route) })
+            }
+        },
         bottomBar = {
             AnimatedVisibility(
-                visible = isBottomBarVisible,
+                visible = isMainTab,
                 enter = slideInVertically(initialOffsetY = { it }),
                 exit = slideOutVertically(targetOffsetY = { it })
             ) {
@@ -237,9 +259,7 @@ fun ArtifyScannerApp() {
                             onClick = {
                                 if (currentRoute != item.route) {
                                     navController.navigate(item.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
+                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                         launchSingleTop = true
                                         restoreState = true
                                     }
@@ -257,10 +277,10 @@ fun ArtifyScannerApp() {
                                     fontSize = 10.sp,
                                     maxLines = 1,
                                     softWrap = false,
-                                    fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                                 )
                             },
-                            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                            colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
                                 indicatorColor = MaterialTheme.colorScheme.primaryContainer,
@@ -279,88 +299,61 @@ fun ArtifyScannerApp() {
             startDestination = Screen.Home.route,
             modifier = Modifier.padding(innerPadding)
         ) {
-            // Home Dashboard
             composable(Screen.Home.route) {
                 HomeScreen(
                     repository = repository,
                     onStartScan = { mode ->
                         ScanningSessionManager.startNewSession(mode)
-                        if (mode == com.example.data.model.ScanMode.BURST_SCAN || mode == com.example.data.model.ScanMode.WIDE_CAMERA) {
-                            // Our own camera: Burst Scan and ultra-wide manual shooting
-                            navController.navigate(Screen.CameraScanner.route)
-                        } else {
-                            launchGoogleScanner(if (mode == com.example.data.model.ScanMode.ID_CARD) 2 else 30)
-                        }
+                        navController.navigate(Screen.ScanIntro.route)
                     },
-                    onOpenDocument = { docId ->
-                        navController.navigate(Screen.DocumentDetail.createRoute(docId))
-                    },
-                    onNavigateToDocuments = {
-                        navController.navigate(Screen.Documents.route)
-                    },
-                    onNavigateToTools = {
-                        navController.navigate(Screen.Tools.route)
-                    }
+                    onOpenDocument = { docId -> navController.navigate(Screen.DocumentDetail.createRoute(docId)) },
+                    onOpenReview = { navController.navigate(Screen.DocumentReview.route) },
+                    onNavigateToDocuments = { navController.navigate(Screen.Documents.route) },
+                    onNavigateToTools = { navController.navigate(Screen.Tools.route) }
                 )
             }
 
-            // Documents Library
             composable(Screen.Documents.route) {
                 DocumentsScreen(
                     repository = repository,
-                    onOpenDocument = { docId ->
-                        navController.navigate(Screen.DocumentDetail.createRoute(docId))
-                    }
+                    onOpenDocument = { docId -> navController.navigate(Screen.DocumentDetail.createRoute(docId)) }
                 )
             }
 
-            // PDF Toolkit
             composable(Screen.Tools.route) {
                 PdfToolsScreen(
                     repository = repository,
-                    onOpenDocument = { docId ->
-                        navController.navigate(Screen.DocumentDetail.createRoute(docId))
-                    }
+                    onOpenDocument = { docId -> navController.navigate(Screen.DocumentDetail.createRoute(docId)) }
                 )
             }
 
-            // AI Document Assistant
-            composable(Screen.AiAssistant.route) {
-                AiAssistantScreen(repository = repository)
-            }
+            composable(Screen.AiAssistant.route) { AiAssistantScreen(repository = repository) }
 
-            // Settings
             composable(Screen.Settings.route) {
-                SettingsScreen()
+                SettingsScreen(onOpenProfile = { navController.navigate(Screen.Profile.route) })
             }
 
-            // Camera Continuous Scanner
-            composable(Screen.CameraScanner.route) {
-                CameraScannerScreen(
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    },
-                    onFinishScanning = {
-                        navController.navigate(Screen.DocumentReview.route)
-                    }
+            composable(Screen.Profile.route) {
+                ProfileScreen(
+                    repository = repository,
+                    onBack = { navController.popBackStack() },
+                    onSignOut = { AuthManager.signOut(context) }
                 )
             }
 
-            // Document Review Screen (multi-page reorder, rotate, filter, export)
+            // Animated pre-camera screen, then Google's scanner
+            composable(Screen.ScanIntro.route) {
+                ScanIntroScreen(
+                    onOpenCamera = { maxPages -> launchGoogleScanner(maxPages) },
+                    onClose = { navController.popBackStack() }
+                )
+            }
+
             composable(Screen.DocumentReview.route) {
                 DocumentReviewScreen(
                     repository = repository,
-                    onNavigateBackToCamera = {
-                        navController.popBackStack()
-                    },
-                    onAddPages = {
-                        // Pages came from our own camera: go back to it. Otherwise add more with Google's scanner.
-                        if (navController.previousBackStackEntry?.destination?.route == Screen.CameraScanner.route) {
-                            navController.popBackStack()
-                        } else {
-                            launchGoogleScanner(30)
-                        }
-                    },
+                    onNavigateBackToCamera = { navController.popBackStack() },
+                    onAddPages = { launchGoogleScanner(ScanIntroPages.ADD_MORE) },
                     onFinishAndGoHome = {
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Home.route) { inclusive = true }
@@ -374,7 +367,6 @@ fun ArtifyScannerApp() {
                 )
             }
 
-            // Document Detail Viewer
             composable(
                 route = Screen.DocumentDetail.route,
                 arguments = listOf(navArgument("documentId") { type = NavType.StringType })
@@ -383,11 +375,13 @@ fun ArtifyScannerApp() {
                 DocumentDetailScreen(
                     documentId = docId,
                     repository = repository,
-                    onNavigateBack = {
-                        navController.popBackStack()
-                    }
+                    onNavigateBack = { navController.popBackStack() }
                 )
             }
         }
     }
+}
+
+private object ScanIntroPages {
+    const val ADD_MORE = 30
 }

@@ -101,6 +101,7 @@ fun HomeScreen(
     repository: DocumentRepository,
     onStartScan: (ScanMode) -> Unit,
     onOpenDocument: (String) -> Unit,
+    onOpenReview: () -> Unit,
     onNavigateToDocuments: () -> Unit,
     onNavigateToTools: () -> Unit
 ) {
@@ -125,7 +126,7 @@ fun HomeScreen(
                 for (uri in uris) {
                     ScanningSessionManager.addPageFromUri(context, uri)
                 }
-                onStartScan(ScanMode.BATCH_DOCUMENTS)
+                onOpenReview()
             }
         }
     }
@@ -204,8 +205,6 @@ fun HomeScreen(
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        item { BrandHeader() }
-
         // Hero: headline, primary scan button and the three promises
         item {
             Column(
@@ -293,20 +292,12 @@ fun HomeScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ActionCard(
-                        title = "Wide Camera", subtitle = "Ultra-wide shots",
-                        icon = Icons.Default.PhotoCamera, tint = BrandOrange,
-                        onClick = {
-                            ScanningSessionManager.startNewSession(ScanMode.WIDE_CAMERA)
-                            onStartScan(ScanMode.WIDE_CAMERA)
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ActionCard(
                         title = "PDF Tools", subtitle = "Merge & Sign",
                         icon = Icons.Default.DocumentScanner, tint = BrandPink,
                         onClick = onNavigateToTools,
                         modifier = Modifier.weight(1f)
                     )
+                    Spacer(Modifier.weight(1f))
                 }
             }
         }
