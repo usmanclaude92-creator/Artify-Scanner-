@@ -348,6 +348,18 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         QuickActionTile(
+                            title = "Burst Scan",
+                            subtitle = "Hands-free pages",
+                            icon = Icons.Default.CameraAlt,
+                            iconBgColor = Color(0xFF10B981),
+                            onClick = {
+                                ScanningSessionManager.startNewSession(ScanMode.BURST_SCAN)
+                                onStartScan(ScanMode.BURST_SCAN)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        QuickActionTile(
                             title = "Import Files",
                             subtitle = "Photos & PDFs",
                             icon = Icons.Default.UploadFile,

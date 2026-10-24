@@ -68,6 +68,7 @@ fun CameraPreviewView(
     modifier: Modifier = Modifier,
     isFlashOn: Boolean,
     isAutoCapture: Boolean,
+    burst: BurstScanner? = null,
     onCaptureReady: (ImageCapture?) -> Unit,
     onAutoCapture: () -> Unit,
     onError: (String) -> Unit
@@ -87,6 +88,7 @@ fun CameraPreviewView(
     var rebind: (() -> Unit)? by remember { mutableStateOf(null) }
     var lensReported by remember { mutableStateOf(false) }
     val autoCaptureEnabled by rememberUpdatedState(isAutoCapture)
+    val burstScanner by rememberUpdatedState(burst)
     val autoCaptureCallback by rememberUpdatedState(onAutoCapture)
     val stabilityDetector = remember { StabilityDetector() }
 
@@ -120,7 +122,8 @@ fun CameraPreviewView(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
-                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                    // FIT shows the whole sensor frame (widest field of view) instead of cropping its sides
+                    scaleType = PreviewView.ScaleType.FIT_CENTER
                 }
                 previewView = view
 
@@ -145,7 +148,13 @@ fun CameraPreviewView(
                         .also {
                             it.setAnalyzer(cameraExecutor) { image ->
                                 val trigger = try {
-                                    autoCaptureEnabled && stabilityDetector.shouldCapture(image)
+                                    val b = burstScanner
+                                    if (b != null) {
+                                        b.analyze(image)
+                                        false
+                                    } else {
+                                        autoCaptureEnabled && stabilityDetector.shouldCapture(image)
+                                    }
                                 } finally {
                                     image.close()
                                 }
@@ -155,8 +164,6 @@ fun CameraPreviewView(
                             }
                         }
                     val bind = {
-                        // The viewport makes the captured photo match what the preview shows
-                        val viewPort = view.viewPort
                         if (lenses.isEmpty()) {
                             lenses = buildLensOptions(ctx, cameraProvider)
                             // Start on the widest lens (smallest focal length), as scanning needs the whole page in view
@@ -169,7 +176,6 @@ fun CameraPreviewView(
                                 .addUseCase(preview)
                                 .addUseCase(capture)
                                 .addUseCase(analysis)
-                                .apply { viewPort?.let { setViewPort(it) } }
                                 .build()
                             val bound = try {
                                 cameraProvider.bindToLifecycle(lifecycleOwner, option?.selector ?: CameraSelector.DEFAULT_BACK_CAMERA, group)
@@ -215,7 +221,28 @@ fun CameraPreviewView(
         )
 
         // Viewfinder HUD Overlay with animated laser beam
-        DocumentScanOverlay(isAutoCapture = isAutoCapture)
+        DocumentScanOverlay(isAutoCapture = isAutoCapture, burst = burst?.status?.value)
+
+        // Burst status banner
+        burst?.status?.value?.let { st ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 118.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50))
+                    .padding(horizontal = 18.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = st.message,
+                    color = when (st.phase) {
+                        BurstScanner.Phase.TURN_PAGE -> Color(0xFFFBBF24)
+                        BurstScanner.Phase.CAPTURING -> Color(0xFF34D399)
+                        else -> Color.White
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
 
         // Lens switcher: cycles through every lens the phone exposes
         if (lenses.size > 1) {
@@ -371,7 +398,7 @@ private fun imageProxyToBitmap(image: ImageProxy, rotationDegrees: Int): Bitmap?
 }
 
 @Composable
-fun DocumentScanOverlay(isAutoCapture: Boolean) {
+fun DocumentScanOverlay(isAutoCapture: Boolean, burst: BurstScanner.Status? = null) {
     val infiniteTransition = rememberInfiniteTransition(label = "scanner_laser")
     val laserYRatio by infiniteTransition.animateFloat(
         initialValue = 0.12f,
@@ -386,10 +413,15 @@ fun DocumentScanOverlay(isAutoCapture: Boolean) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val strokeWidth = 3.5f * density
         val cornerLength = 36f * density
-        val marginX = size.width * 0.08f
-        val marginY = size.height * 0.12f
-        val docWidth = size.width - (marginX * 2)
-        val docHeight = size.height - (marginY * 2)
+        // The preview is letterboxed to the sensor's 3:4 portrait frame; draw relative to it
+        val previewW = minOf(size.width, size.height * 3f / 4f)
+        val previewH = previewW * 4f / 3f
+        val previewLeft = (size.width - previewW) / 2f
+        val previewTop = (size.height - previewH) / 2f
+        val marginX = previewLeft + previewW * 0.04f
+        val marginY = previewTop + previewH * 0.03f
+        val docWidth = previewW * 0.92f
+        val docHeight = previewH * 0.94f
 
         val frameColor = if (isAutoCapture) Color(0xFF00E5FF) else Color(0xFF38BDF8)
 
@@ -437,14 +469,31 @@ fun DocumentScanOverlay(isAutoCapture: Boolean) {
         drawLine(frameColor, Offset(marginX + docWidth, marginY + docHeight), Offset(marginX + docWidth - cornerLength, marginY + docHeight), strokeWidth)
         drawLine(frameColor, Offset(marginX + docWidth, marginY + docHeight), Offset(marginX + docWidth, marginY + docHeight - cornerLength), strokeWidth)
 
-        // Laser beam sweep
-        val laserY = marginY + (docHeight * laserYRatio)
-        drawLine(
-            color = Color(0xFF00E5FF),
-            start = Offset(marginX + 8f, laserY),
-            end = Offset(marginX + docWidth - 8f, laserY),
-            strokeWidth = 2.5f * density
-        )
+        if (burst == null) {
+            // Laser beam sweep
+            val laserY = marginY + (docHeight * laserYRatio)
+            drawLine(
+                color = Color(0xFF00E5FF),
+                start = Offset(marginX + 8f, laserY),
+                end = Offset(marginX + docWidth - 8f, laserY),
+                strokeWidth = 2.5f * density
+            )
+        } else {
+            // Live page outline found by Burst Scan
+            burst.quad?.let { q ->
+                fun pt(p: android.graphics.PointF) = Offset(previewLeft + p.x * previewW, previewTop + p.y * previewH)
+                val outline = androidx.compose.ui.graphics.Path().apply {
+                    val a = pt(q.topLeft)
+                    moveTo(a.x, a.y)
+                    listOf(q.topRight, q.bottomRight, q.bottomLeft).forEach { lineTo(pt(it).x, pt(it).y) }
+                    close()
+                }
+                val ready = burst.phase == BurstScanner.Phase.HOLD || burst.phase == BurstScanner.Phase.CAPTURING
+                val color = if (ready) Color(0xFF34D399) else Color(0xFFFBBF24)
+                drawPath(outline, color.copy(alpha = 0.18f))
+                drawPath(outline, color, style = Stroke(width = 4f * density))
+            }
+        }
     }
 }
 

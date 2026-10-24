@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.compose.runtime.DisposableEffect
+import com.example.camera.BurstScanner
+import androidx.compose.material.icons.filled.BurstMode
 import com.example.ui.review.CropDialog
 import com.example.data.model.NormalizedCornerPoints
 import com.example.data.model.CapturedPage
@@ -193,14 +196,9 @@ fun CameraScannerScreen(
             imageCapture = activeImageCapture,
             onSuccess = { photo ->
                 scope.launch {
-                    // Keep only what was inside the on-screen guide frame (see DocumentScanOverlay)
-                    val guided = withContext(Dispatchers.Default) {
-                        ImageProcessor.cropNormalized(photo, 0.08f, 0.12f, 0.92f, 0.88f).also {
-                            if (it !== photo) photo.recycle()
-                        }
-                    }
-                    val detected = withContext(Dispatchers.Default) { ImageProcessor.detectDocumentCornersOrNull(guided) }
-                    val page = ScanningSessionManager.addPageFromBitmap(context, guided, autoCrop = false, corners = detected)
+                    // The whole sensor frame is kept (widest field of view); detection finds the page in it
+                    val detected = withContext(Dispatchers.Default) { ImageProcessor.detectDocumentCornersOrNull(photo) }
+                    val page = ScanningSessionManager.addPageFromBitmap(context, photo, autoCrop = false, corners = detected)
                     // Detection only pre-places the corners; the user confirms or drags them
                     if (detected == null || ScanningSessionManager.confirmCropAfterCapture.value) {
                         pendingCropPage = page
@@ -212,6 +210,36 @@ fun CameraScannerScreen(
         )
     }
 
+    // Burst Scan: hands-free capture, page after page, until the user finishes
+    val burst = remember { BurstScanner() }
+    val burstMode = ScanningSessionManager.scanMode.value == ScanMode.BURST_SCAN
+
+    fun captureBurst(quad: NormalizedCornerPoints) {
+        takePhoto(
+            context = context,
+            imageCapture = activeImageCapture,
+            onSuccess = { photo ->
+                scope.launch {
+                    // Sharpen the live outline with a detection on the full-resolution photo when they agree
+                    val refined = withContext(Dispatchers.Default) { ImageProcessor.detectDocumentCornersOrNull(photo) }
+                    val corners = if (refined != null && cornerShift(refined, quad) < 0.08f) refined else quad
+                    ScanningSessionManager.addPageFromBitmap(context, photo, autoCrop = false, corners = corners)
+                    burst.captureFinished(success = true)
+                }
+            },
+            onError = { err ->
+                Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                burst.captureFinished(success = false)
+            }
+        )
+    }
+
+    DisposableEffect(burst) {
+        burst.onCaptureRequested = { quad -> captureBurst(quad) }
+        onDispose { burst.onCaptureRequested = null }
+    }
+    LaunchedEffect(burstMode) { burst.reset() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -222,6 +250,7 @@ fun CameraScannerScreen(
             CameraPreviewView(
                 isFlashOn = ScanningSessionManager.isFlashOn.value,
                 isAutoCapture = ScanningSessionManager.isAutoCapture.value,
+                burst = if (burstMode) burst else null,
                 onCaptureReady = { activeImageCapture = it },
                 onAutoCapture = { captureFromCamera() },
                 onError = { err ->
@@ -310,6 +339,30 @@ fun CameraScannerScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Burst Scan toggle (hands-free capture, page after page)
+                IconButton(
+                    onClick = {
+                        ScanningSessionManager.scanMode.value =
+                            if (burstMode) ScanMode.BATCH_DOCUMENTS else ScanMode.BURST_SCAN
+                        Toast.makeText(
+                            context,
+                            if (burstMode) "Burst Scan off" else "Burst Scan on: hold each page steady, then turn it",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(if (burstMode) Color(0xFF10B981) else Color.Black.copy(alpha = 0.5f))
+                        .testTag("camera_burst_toggle")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BurstMode,
+                        contentDescription = "Burst Scan",
+                        tint = Color.White
+                    )
+                }
+
                 // Smart Scan (Google document scanner with accurate edge detection)
                 IconButton(
                     onClick = { startSmartScan() },
@@ -585,4 +638,12 @@ fun CameraScannerScreen(
             }
         }
     }
+}
+
+private fun cornerShift(a: NormalizedCornerPoints, b: NormalizedCornerPoints): Float {
+    fun d(p: PointF, q: PointF) = maxOf(kotlin.math.abs(p.x - q.x), kotlin.math.abs(p.y - q.y))
+    return maxOf(
+        d(a.topLeft, b.topLeft), d(a.topRight, b.topRight),
+        d(a.bottomRight, b.bottomRight), d(a.bottomLeft, b.bottomLeft)
+    )
 }

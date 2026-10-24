@@ -24,7 +24,8 @@ enum class ScanMode(val title: String, val subtitle: String) {
     BATCH_DOCUMENTS("Batch Scan", "Continuous multi-page scanning"),
     SINGLE_PAGE("Single Page", "Capture one crisp page"),
     RECEIPT_INVOICE("Receipt & Invoice", "OCR & structured expense parsing"),
-    ID_CARD("ID Card", "Front & Back combined on single sheet")
+    ID_CARD("ID Card", "Front & Back combined on single sheet"),
+    BURST_SCAN("Burst Scan", "Hands-free capture, page after page")
 }
 
 enum class PdfPageSize(val displayName: String, val widthPt: Int, val heightPt: Int) {

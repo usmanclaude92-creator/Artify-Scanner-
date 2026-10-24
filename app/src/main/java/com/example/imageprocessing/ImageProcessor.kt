@@ -323,25 +323,7 @@ object ImageProcessor {
             Utils.bitmapToMat(small, rgba)
             Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
             Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 0.0)
-            val frameArea = (small.width * small.height).toDouble()
-
-            val candidates = listOfNotNull(
-                quadFromEdges(gray, frameArea),
-                quadFromBrightRegion(gray, frameArea)
-            )
-            for (quad in candidates) {
-                val tl = quad.minByOrNull { it.x + it.y }!!
-                val br = quad.maxByOrNull { it.x + it.y }!!
-                val tr = quad.maxByOrNull { it.x - it.y }!!
-                val bl = quad.minByOrNull { it.x - it.y }!!
-                fun norm(p: org.opencv.core.Point) = PointF(
-                    (p.x / small.width).toFloat().coerceIn(0f, 1f),
-                    (p.y / small.height).toFloat().coerceIn(0f, 1f)
-                )
-                val result = NormalizedCornerPoints(norm(tl), norm(tr), norm(br), norm(bl))
-                if (isPlausibleQuad(result, bitmap.width, bitmap.height)) return result
-            }
-            return null
+            return detectQuadInGray(gray, bitmap.width, bitmap.height)
         } catch (e: Exception) {
             android.util.Log.w("Artify", "Edge detection failed", e)
             return null
@@ -350,6 +332,31 @@ object ImageProcessor {
             gray.release()
             if (small !== bitmap) small.recycle()
         }
+    }
+
+    /**
+     * Quad detection on an already blurred grayscale frame. Coordinates are normalized to the frame;
+     * plausibility is judged against the original image size ([refWidth] x [refHeight]).
+     */
+    fun detectQuadInGray(gray: Mat, refWidth: Int, refHeight: Int): NormalizedCornerPoints? {
+        val frameArea = (gray.cols() * gray.rows()).toDouble()
+        val candidates = listOfNotNull(
+            quadFromEdges(gray, frameArea),
+            quadFromBrightRegion(gray, frameArea)
+        )
+        for (quad in candidates) {
+            val tl = quad.minByOrNull { it.x + it.y }!!
+            val br = quad.maxByOrNull { it.x + it.y }!!
+            val tr = quad.maxByOrNull { it.x - it.y }!!
+            val bl = quad.minByOrNull { it.x - it.y }!!
+            fun norm(p: org.opencv.core.Point) = PointF(
+                (p.x / gray.cols()).toFloat().coerceIn(0f, 1f),
+                (p.y / gray.rows()).toFloat().coerceIn(0f, 1f)
+            )
+            val result = NormalizedCornerPoints(norm(tl), norm(tr), norm(br), norm(bl))
+            if (isPlausibleQuad(result, refWidth, refHeight)) return result
+        }
+        return null
     }
 
     private fun quadFromEdges(gray: Mat, frameArea: Double): Array<org.opencv.core.Point>? {
