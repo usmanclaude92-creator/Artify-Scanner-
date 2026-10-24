@@ -2,19 +2,15 @@ package com.example.pdf
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Rect
-import android.graphics.pdf.PdfDocument
 import com.example.data.model.CapturedPage
+import com.example.data.model.OcrLine
 import com.example.data.model.PdfExportConfig
 import com.example.data.model.PdfPageSize
 import com.example.data.model.PdfQuality
 import com.example.imageprocessing.ImageProcessor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedOutputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -23,8 +19,8 @@ import kotlin.math.min
 object PdfEngine {
 
     /**
-     * Combines multiple captured/edited pages into ONE valid multi-page PDF document.
-     * Processes pages sequentially and recycles bitmaps to avoid memory spikes.
+     * Combines multiple captured/edited pages into ONE multi-page PDF with a searchable text layer.
+     * Pages are decoded, written and recycled one at a time to keep memory flat.
      */
     suspend fun createMultiPagePdf(
         context: Context,
@@ -35,157 +31,54 @@ object PdfEngine {
     ): Boolean = withContext(Dispatchers.IO) {
         if (pages.isEmpty()) return@withContext false
 
-        val pdfDocument = PdfDocument()
         val tempFile = File(context.cacheDir, "export_temp_${System.currentTimeMillis()}.pdf")
+        val totalPages = pages.count { File(it.localImagePath).exists() }
+        if (totalPages == 0) return@withContext false
 
         try {
-            val totalPages = pages.size
-
+            val writtenPages = PdfWriter(
+                BufferedOutputStream(FileOutputStream(tempFile)),
+                PdfInfo(
+                    title = config.documentTitle.ifBlank { config.filename },
+                    author = config.author,
+                    creator = "Artify Scanner"
+                )
+            ).use { writer ->
             for ((index, page) in pages.withIndex()) {
-                onProgress(index + 1, totalPages)
+                onProgress(index + 1, pages.size)
 
-                // 1. Decode page image
-                val imageFile = File(page.localImagePath)
                 val (reqW, reqH) = when (config.quality) {
                     PdfQuality.HIGH -> Pair(1600, 2200)
                     PdfQuality.MEDIUM -> Pair(1240, 1754)
                     PdfQuality.COMPRESSED -> Pair(900, 1250)
                 }
-                var rawBitmap = ImageProcessor.decodeSampledBitmap(
-                    imageFile,
-                    reqWidth = reqW,
-                    reqHeight = reqH
-                ) ?: continue
-                rawBitmap = reencodeJpeg(rawBitmap, config.quality.jpegQuality)
+                var bitmap = ImageProcessor.decodeSampledBitmap(File(page.localImagePath), reqW, reqH) ?: continue
 
-                // 2. Apply rotation if specified
                 if (page.rotationDegrees != 0) {
-                    val rotated = ImageProcessor.rotateBitmap(rawBitmap, page.rotationDegrees)
-                    if (rotated != rawBitmap) {
-                        rawBitmap.recycle()
-                        rawBitmap = rotated
+                    val rotated = ImageProcessor.rotateBitmap(bitmap, page.rotationDegrees)
+                    if (rotated != bitmap) {
+                        bitmap.recycle()
+                        bitmap = rotated
                     }
                 }
 
-                // 3. Determine PDF Page Dimensions
-                val (pageWidthPt, pageHeightPt) = when (config.pageSize) {
-                    PdfPageSize.A4 -> Pair(PdfPageSize.A4.widthPt, PdfPageSize.A4.heightPt)
-                    PdfPageSize.LETTER -> Pair(PdfPageSize.LETTER.widthPt, PdfPageSize.LETTER.heightPt)
-                    PdfPageSize.ORIGINAL -> {
-                        // Scale proportionally to reasonable PDF pt
-                        val scale = min(595f / rawBitmap.width, 842f / rawBitmap.height)
-                        val w = (rawBitmap.width * scale).toInt().coerceAtLeast(300)
-                        val h = (rawBitmap.height * scale).toInt().coerceAtLeast(400)
-                        Pair(w, h)
-                    }
+                try {
+                    writer.addPage(buildPageSpec(bitmap, page, config, writer.pageCount + 1, totalPages))
+                } finally {
+                    bitmap.recycle()
                 }
-
-                val pageInfo = PdfDocument.PageInfo.Builder(pageWidthPt, pageHeightPt, index + 1).create()
-                val pdfPage = pdfDocument.startPage(pageInfo)
-                val canvas: Canvas = pdfPage.canvas
-
-                // Clear background to white
-                canvas.drawColor(Color.WHITE)
-
-                // Margin calculation
-                val marginPt = if (config.pageSize == PdfPageSize.ORIGINAL) 0f else 18f
-                val availableWidth = pageWidthPt - (marginPt * 2)
-                val availableHeight = pageHeightPt - (marginPt * 2) - if (config.includePageNumbers) 24f else 0f
-
-                // Scale image to fit inside available bounds while preserving aspect ratio
-                val imgWidth = rawBitmap.width.toFloat()
-                val imgHeight = rawBitmap.height.toFloat()
-                val imgAspect = imgWidth / imgHeight
-                val targetAspect = availableWidth / availableHeight
-
-                val drawWidth: Float
-                val drawHeight: Float
-                if (imgAspect > targetAspect) {
-                    drawWidth = availableWidth
-                    drawHeight = availableWidth / imgAspect
-                } else {
-                    drawHeight = availableHeight
-                    drawWidth = availableHeight * imgAspect
-                }
-
-                val left = marginPt + (availableWidth - drawWidth) / 2f
-                val top = marginPt + (availableHeight - drawHeight) / 2f
-
-                val destRect = Rect(
-                    left.toInt(),
-                    top.toInt(),
-                    (left + drawWidth).toInt(),
-                    (top + drawHeight).toInt()
-                )
-
-                val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-                canvas.drawBitmap(rawBitmap, null, destRect, paint)
-
-                // Searchable OCR Text Layer (invisible text mapped over document)
-                if (page.ocrText.isNotBlank()) {
-                    val ocrPaint = Paint().apply {
-                        color = Color.TRANSPARENT
-                        textSize = 8f
-                    }
-                    val sampleLines = page.ocrText.lines().take(40)
-                    var lineY = top + 15f
-                    for (line in sampleLines) {
-                        if (line.isNotBlank() && lineY < top + drawHeight - 10f) {
-                            canvas.drawText(line.take(80), left + 10f, lineY, ocrPaint)
-                            lineY += 12f
-                        }
-                    }
-                }
-
-                // Optional Watermark
-                if (config.watermarkText.isNotBlank()) {
-                    val watermarkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.argb(45, 120, 120, 120)
-                        textSize = 34f
-                        textAlign = Paint.Align.CENTER
-                    }
-                    canvas.save()
-                    canvas.rotate(-35f, pageWidthPt / 2f, pageHeightPt / 2f)
-                    canvas.drawText(config.watermarkText, pageWidthPt / 2f, pageHeightPt / 2f, watermarkPaint)
-                    canvas.restore()
-                }
-
-                // Optional Page Numbering
-                if (config.includePageNumbers) {
-                    val footerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.DKGRAY
-                        textSize = 9f
-                        textAlign = Paint.Align.RIGHT
-                    }
-                    val footerText = "Page ${index + 1} of $totalPages"
-                    canvas.drawText(footerText, pageWidthPt - marginPt - 8f, pageHeightPt - 10f, footerPaint)
-
-                    val brandPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        color = Color.GRAY
-                        textSize = 8f
-                        textAlign = Paint.Align.LEFT
-                    }
-                    canvas.drawText("Artify Scanner", marginPt + 8f, pageHeightPt - 10f, brandPaint)
-                }
-
-                pdfDocument.finishPage(pdfPage)
-                rawBitmap.recycle()
             }
 
-            // Write to temp file first
-            tempFile.parentFile?.mkdirs()
-            FileOutputStream(tempFile).use { out ->
-                pdfDocument.writeTo(out)
+            if (writer.pageCount > 0) writer.finish()
+            writer.pageCount
             }
 
-            // Validate temp file exists and has size
+            if (writtenPages == 0) {
+                tempFile.delete()
+                return@withContext false
+            }
+
             if (tempFile.exists() && tempFile.length() > 0) {
-                PdfMetadata.apply(
-                    tempFile,
-                    title = config.documentTitle.ifBlank { config.filename },
-                    author = config.author,
-                    creator = "Artify Scanner"
-                )
                 outputFile.parentFile?.mkdirs()
                 if (outputFile.exists()) outputFile.delete()
                 tempFile.copyTo(outputFile, overwrite = true)
@@ -195,26 +88,101 @@ object PdfEngine {
                 false
             }
         } catch (e: Exception) {
-            android.util.Log.e("Artify", "Operation failed", e)
+            android.util.Log.e("Artify", "PDF export failed", e)
             tempFile.delete()
             false
-        } finally {
-            pdfDocument.close()
         }
     }
 
-    /** Round-trips the bitmap through JPEG so the requested quality level shrinks the output. */
-    private fun reencodeJpeg(source: Bitmap, quality: Int): Bitmap {
-        if (quality >= 100) return source
-        return try {
-            val out = ByteArrayOutputStream()
-            source.compress(Bitmap.CompressFormat.JPEG, quality, out)
-            val bytes = out.toByteArray()
-            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return source
-            source.recycle()
-            decoded
-        } catch (e: OutOfMemoryError) {
-            source
+    private fun buildPageSpec(
+        bitmap: Bitmap,
+        page: CapturedPage,
+        config: PdfExportConfig,
+        pageNumber: Int,
+        totalPages: Int
+    ): PdfPageSpec {
+        val (pageWidth, pageHeight) = when (config.pageSize) {
+            PdfPageSize.A4 -> Pair(PdfPageSize.A4.widthPt.toFloat(), PdfPageSize.A4.heightPt.toFloat())
+            PdfPageSize.LETTER -> Pair(PdfPageSize.LETTER.widthPt.toFloat(), PdfPageSize.LETTER.heightPt.toFloat())
+            PdfPageSize.ORIGINAL -> {
+                val scale = min(595f / bitmap.width, 842f / bitmap.height)
+                Pair((bitmap.width * scale).coerceAtLeast(300f), (bitmap.height * scale).coerceAtLeast(400f))
+            }
+        }
+
+        val margin = if (config.pageSize == PdfPageSize.ORIGINAL) 0f else 18f
+        val availableWidth = pageWidth - margin * 2
+        val availableHeight = pageHeight - margin * 2 - if (config.includePageNumbers) 24f else 0f
+
+        val imgAspect = bitmap.width.toFloat() / bitmap.height
+        val drawWidth: Float
+        val drawHeight: Float
+        if (imgAspect > availableWidth / availableHeight) {
+            drawWidth = availableWidth
+            drawHeight = availableWidth / imgAspect
+        } else {
+            drawHeight = availableHeight
+            drawWidth = availableHeight * imgAspect
+        }
+        val left = margin + (availableWidth - drawWidth) / 2f
+        val top = margin + (availableHeight - drawHeight) / 2f
+        val bottom = pageHeight - top - drawHeight // PDF origin is bottom-left
+
+        val jpeg = ByteArrayOutputStream().also {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, config.quality.jpegQuality, it)
+        }.toByteArray()
+
+        return PdfPageSpec(
+            widthPt = pageWidth,
+            heightPt = pageHeight,
+            jpeg = jpeg,
+            imageWidth = bitmap.width,
+            imageHeight = bitmap.height,
+            drawLeft = left,
+            drawBottom = bottom,
+            drawWidth = drawWidth,
+            drawHeight = drawHeight,
+            hiddenText = textBoxes(page, left, bottom, drawWidth, drawHeight),
+            watermark = config.watermarkText,
+            footerLeft = if (config.includePageNumbers) "Artify Scanner" else "",
+            footerRight = if (config.includePageNumbers) "Page $pageNumber of $totalPages" else "",
+            footerMargin = margin
+        )
+    }
+
+    /** Maps OCR line boxes (normalized to the unrotated image) onto the drawn page image. */
+    private fun textBoxes(
+        page: CapturedPage,
+        left: Float,
+        bottom: Float,
+        drawWidth: Float,
+        drawHeight: Float
+    ): List<PdfTextBox> {
+        val lines = page.ocrLines.ifEmpty { evenlySpacedLines(page.ocrText) }
+        return lines.mapNotNull { line ->
+            if (line.text.isBlank()) return@mapNotNull null
+            val r = PdfWriter.rotateNormalized(line.left, line.top, line.right, line.bottom, page.rotationDegrees)
+            val boxHeight = (r[3] - r[1]) * drawHeight
+            val boxWidth = (r[2] - r[0]) * drawWidth
+            if (boxHeight <= 0f || boxWidth <= 0f) return@mapNotNull null
+            PdfTextBox(
+                text = line.text,
+                x = left + r[0] * drawWidth,
+                baselineY = bottom + (1f - r[3]) * drawHeight + boxHeight * 0.2f,
+                width = boxWidth,
+                fontSize = boxHeight * 0.85f
+            )
+        }
+    }
+
+    /** Fallback for pages without stored line boxes: still searchable, only roughly positioned. */
+    private fun evenlySpacedLines(text: String): List<OcrLine> {
+        val lines = text.lines().filter { it.isNotBlank() }
+        if (lines.isEmpty()) return emptyList()
+        val step = 0.9f / lines.size
+        return lines.mapIndexed { i, t ->
+            val top = 0.05f + i * step
+            OcrLine(t, 0.05f, top, 0.95f, top + step * 0.8f)
         }
     }
 

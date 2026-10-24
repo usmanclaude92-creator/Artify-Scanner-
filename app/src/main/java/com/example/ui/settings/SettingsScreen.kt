@@ -252,6 +252,7 @@ fun SettingsScreen() {
                                             onSuccess = {
                                                 AppLock.setEnabled(context, wantEnabled)
                                                 appLockEnabled = wantEnabled
+                                                (activity as? com.example.MainActivity)?.applySecureFlag()
                                                 Toast.makeText(context, if (wantEnabled) "App lock enabled" else "App lock disabled", Toast.LENGTH_SHORT).show()
                                             }
                                         )

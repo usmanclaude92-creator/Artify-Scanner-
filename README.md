@@ -22,7 +22,7 @@ Artify Scanner is an advanced, production-grade Android document scanning and pr
 - **Full-Size Inspection**: Interactive inspection of all captured pages.
 - **Page Reordering**: Move pages up/down or reorder sequence before PDF generation.
 - **Rotation**: 90° clockwise and counter-clockwise orientation adjustments.
-- **Perspective Correction**: Automatic page-edge detection (Otsu threshold + largest region) followed by 4-point warping. Manual corner adjustment is not implemented yet.
+- **Perspective Correction**: Automatic page-edge detection (Otsu threshold + largest region) followed by 4-point warping. Manual corner adjustment is available per page in the review screen (Crop button).
 - **Enhancement Filters**:
   - `Magic Color`: Enhances clarity, lifts shadows, and sharpens text contrast.
   - `B&W Clean`: High-contrast threshold binarization ideal for contracts, receipts, and signatures.
@@ -40,7 +40,7 @@ Artify Scanner is an advanced, production-grade Android document scanning and pr
   - Configurable page numbering footer (e.g. "Page 1 of 5").
   - Custom watermarks (e.g. "CONFIDENTIAL", "DRAFT").
   - Document metadata: Title, Author, Creator.
-- **OCR Text Layer (limited)**: OCR text is drawn invisibly on each page, but Android's `PdfDocument` cannot produce a true searchable text layer, so search/select in third-party PDF readers is not guaranteed. In-app search uses the stored OCR text.
+- **Searchable PDF Text Layer**: A custom streaming PDF writer (`PdfWriter`) embeds each page as a JPEG plus an invisible text layer (render mode 3) positioned from ML Kit line boxes, so text can be searched and selected in standard readers. Limitation: only Latin/WinAnsi characters are embedded; other scripts appear as `?` in the text layer (the image is unaffected).
 - **Sharing & Printing**: Integrated Android Sharesheet and native Android `PrintManager` support.
 
 ### 4. On-Device OCR & Structured Expense Extraction
@@ -83,16 +83,17 @@ Artify Scanner is an advanced, production-grade Android document scanning and pr
 | **Single-File Multi-Page PDF Export** | ✅ Complete | Native `PdfDocument` engine with A4/Letter/Original sizes |
 | **Document Boundary Detection** | ⚠️ Heuristic | Edge detection on capture; works best on a light page on a darker background. Live overlay is decorative |
 | **Auto-Capture** | ✅ Complete | Fires after the viewfinder is steady on a textured subject for ~1.2 s |
-| **Perspective Warping** | ✅ Complete | 4-point quadrilateral mapping from detected corners; no manual crop editor |
+| **Perspective Warping** | ✅ Complete | 4-point quadrilateral mapping from detected or user-dragged corners |
 | **Image Enhancement Filters** | ✅ Complete | Magic Color, B&W Clean, Whitening, Grayscale |
 | **On-Device OCR** | ✅ Complete | ML Kit Text Recognition with text selection and copy |
 | **Receipt & Invoice Parser** | ✅ Complete | Extracts merchant, date, amounts, and exports to CSV |
 | **ID Card / Passport Mode** | ✅ Complete | Front & Back guided capture workflow |
-| **Room Local Persistence** | ✅ Complete | `AppDatabase`, `DocumentDao`, `PageEntity`; no destructive migration |
+| **Room Local Persistence** | ✅ Complete | `AppDatabase` v2 (page→document cascade FK, OCR line boxes); no destructive migration |
+| **Session Recovery** | ✅ Complete | In-progress scans are mirrored to disk and restored after an Android process kill |
 | **Document Library & Search** | ✅ Complete | Full-text OCR search, categories, sorting |
 | **PDF Toolkit (Merge, Compress, Sign)** | ✅ Complete | Functional utilities built into Tools screen |
 | **AI Document Assistant** | ⚠️ Needs setup | Real Gemini calls via Firebase AI Logic; requires `google-services.json`. Sends document text to Google |
-| **App Lock** | ✅ Complete | Biometric / device credential; re-locks after 30 s in background |
+| **App Lock** | ✅ Complete | Biometric / device credential; re-locks after 30 s in background; screenshots and recents thumbnails blocked while enabled |
 | **Android Sharesheet & Printing** | ✅ Complete | `FileProvider` URI sharing & `PrintManager` adapter |
 
 ---

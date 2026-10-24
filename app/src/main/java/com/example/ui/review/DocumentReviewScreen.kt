@@ -117,6 +117,7 @@ fun DocumentReviewScreen(
 
     var selectedPageIndex by remember { mutableIntStateOf(0) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var cropPageId by remember { mutableStateOf<String?>(null) }
     var isSavingDocument by remember { mutableStateOf(false) }
     var saveProgressMessage by remember { mutableStateOf("") }
 
@@ -133,6 +134,20 @@ fun DocumentReviewScreen(
                 }
             }
         }
+    }
+
+    cropPageId?.let { id ->
+        pages.find { it.id == id }?.let { cropPage ->
+            CropDialog(
+                originalImagePath = cropPage.originalImagePath,
+                initial = cropPage.cropPoints,
+                onDismiss = { cropPageId = null },
+                onConfirm = { corners ->
+                    cropPageId = null
+                    ScanningSessionManager.updatePageCrop(context, scope, cropPage.id, corners)
+                }
+            )
+        } ?: run { cropPageId = null }
     }
 
     if (showExportDialog) {
@@ -167,6 +182,8 @@ fun DocumentReviewScreen(
                     if (savedDoc != null) {
                         Toast.makeText(context, "PDF saved successfully! (1 file, ${pages.size} pages)", Toast.LENGTH_LONG).show()
                         onOpenDocumentDetail(savedDoc.id)
+                        // Saved: drop the session so it is not restored after a process kill
+                        ScanningSessionManager.startNewSession(ScanningSessionManager.scanMode.value)
                     } else {
                         Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
                     }
@@ -362,6 +379,13 @@ fun DocumentReviewScreen(
                             horizontalArrangement = Arrangement.SpaceAround,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            IconButton(
+                                onClick = { cropPageId = page.id },
+                                modifier = Modifier.testTag("crop_page_button")
+                            ) {
+                                Icon(Icons.Default.Crop, contentDescription = "Adjust Crop")
+                            }
+
                             IconButton(
                                 onClick = { ScanningSessionManager.rotatePage(page.id, clockwise = false) },
                                 modifier = Modifier.testTag("rotate_left_button")

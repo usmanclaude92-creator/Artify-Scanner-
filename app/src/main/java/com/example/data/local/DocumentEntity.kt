@@ -1,6 +1,8 @@
 package com.example.data.local
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.example.data.model.DocumentCategory
 import com.example.data.model.ScanFilter
@@ -21,7 +23,18 @@ data class DocumentEntity(
     val tags: String // comma-separated
 )
 
-@Entity(tableName = "document_pages")
+@Entity(
+    tableName = "document_pages",
+    foreignKeys = [
+        ForeignKey(
+            entity = DocumentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["documentId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("documentId")]
+)
 data class PageEntity(
     @PrimaryKey val id: String,
     val documentId: String,
@@ -30,5 +43,6 @@ data class PageEntity(
     val originalImagePath: String,
     val rotationDegrees: Int,
     val filterName: String, // ScanFilter name
-    val ocrText: String
+    val ocrText: String,
+    val ocrLinesJson: String = "" // serialized List<OcrLine>, see OcrLinesJson
 )

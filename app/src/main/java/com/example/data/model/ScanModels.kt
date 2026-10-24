@@ -56,6 +56,15 @@ data class NormalizedCornerPoints(
     val bottomLeft: PointF = PointF(0.05f, 0.95f)
 )
 
+/** One recognized text line; box coordinates are normalized (0..1) to the processed page image. */
+data class OcrLine(
+    val text: String,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+)
+
 data class CapturedPage(
     val id: String,
     val localImagePath: String,
@@ -65,6 +74,7 @@ data class CapturedPage(
     var filter: ScanFilter = ScanFilter.MAGIC_COLOR,
     var cropPoints: NormalizedCornerPoints = NormalizedCornerPoints(),
     var ocrText: String = "",
+    var ocrLines: List<OcrLine> = emptyList(),
     var isProcessed: Boolean = false
 )
 

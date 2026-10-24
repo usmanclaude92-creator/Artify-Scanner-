@@ -1,6 +1,7 @@
 package com.example
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.fragment.app.FragmentActivity
 import com.example.security.AppLock
 import com.example.ui.security.LockScreen
@@ -69,6 +70,15 @@ data class BottomNavItem(
 )
 
 class MainActivity : FragmentActivity() {
+    /** Hides document content from screenshots and the recents screen while App Lock is on. */
+    fun applySecureFlag() {
+        if (AppLock.isEnabled(this)) {
+            window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
     override fun onStart() {
         super.onStart()
         AppLock.onAppForegrounded(this)
@@ -82,6 +92,8 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) AppLock.lockIfEnabledOnLaunch(this)
+        ScanningSessionManager.init(applicationContext, restore = savedInstanceState != null)
+        applySecureFlag()
         enableEdgeToEdge()
         setContent {
             ArtifyScannerTheme {

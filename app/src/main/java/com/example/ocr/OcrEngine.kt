@@ -2,6 +2,7 @@ package com.example.ocr
 
 import android.graphics.Bitmap
 import com.example.data.model.ReceiptParsedData
+import com.example.data.model.OcrLine
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -15,20 +16,37 @@ object OcrEngine {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
 
-    suspend fun recognizeText(bitmap: Bitmap): String = suspendCancellableCoroutine { continuation ->
+    data class OcrResult(val text: String, val lines: List<OcrLine>)
+
+    suspend fun recognizeText(bitmap: Bitmap): String = recognize(bitmap).text
+
+    /** Recognizes text and returns each line with its normalized bounding box. */
+    suspend fun recognize(bitmap: Bitmap): OcrResult = suspendCancellableCoroutine { continuation ->
         try {
             val image = InputImage.fromBitmap(bitmap, 0)
+            val w = bitmap.width.toFloat()
+            val h = bitmap.height.toFloat()
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    continuation.resume(visionText.text)
+                    val lines = visionText.textBlocks.flatMap { it.lines }.mapNotNull { line ->
+                        val box = line.boundingBox ?: return@mapNotNull null
+                        OcrLine(
+                            text = line.text,
+                            left = (box.left / w).coerceIn(0f, 1f),
+                            top = (box.top / h).coerceIn(0f, 1f),
+                            right = (box.right / w).coerceIn(0f, 1f),
+                            bottom = (box.bottom / h).coerceIn(0f, 1f)
+                        )
+                    }
+                    continuation.resume(OcrResult(visionText.text, lines))
                 }
                 .addOnFailureListener { error ->
-                    android.util.Log.e("Artify", "Operation failed", error)
-                    continuation.resume("")
+                    android.util.Log.e("Artify", "OCR failed", error)
+                    continuation.resume(OcrResult("", emptyList()))
                 }
         } catch (e: Exception) {
-            android.util.Log.e("Artify", "Operation failed", e)
-            continuation.resume("")
+            android.util.Log.e("Artify", "OCR failed", e)
+            continuation.resume(OcrResult("", emptyList()))
         }
     }
 

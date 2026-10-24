@@ -77,7 +77,8 @@ class DocumentRepository(private val context: Context) {
                 pageIndex = entity.pageIndex,
                 rotationDegrees = entity.rotationDegrees,
                 filter = try { ScanFilter.valueOf(entity.filterName) } catch (e: Exception) { ScanFilter.MAGIC_COLOR },
-                ocrText = entity.ocrText
+                ocrText = entity.ocrText,
+                ocrLines = OcrLinesJson.decode(entity.ocrLinesJson)
             )
         }
     }
@@ -170,10 +171,10 @@ class DocumentRepository(private val context: Context) {
                 originalImagePath = page.originalImagePath,
                 rotationDegrees = page.rotationDegrees,
                 filterName = page.filter.name,
-                ocrText = page.ocrText
+                ocrText = page.ocrText,
+                ocrLinesJson = OcrLinesJson.encode(page.ocrLines)
             )
         }
-        dao.insertPages(pageEntities)
 
         // Combine OCR text across all pages for full-text search
         val fullOcrText = persistedPages.joinToString("\n\n") { it.ocrText }
@@ -196,6 +197,7 @@ class DocumentRepository(private val context: Context) {
             tags = "Scanned,${category.displayName}"
         )
         dao.insertDocument(docEntity)
+        dao.insertPages(pageEntities)
 
         docEntity.toItem()
     }
@@ -341,19 +343,6 @@ class DocumentRepository(private val context: Context) {
             outputFile = samplePdf
         )
 
-        dao.insertPages(listOf(
-            PageEntity(
-                id = "guide_page_1",
-                documentId = docId,
-                pageIndex = 0,
-                imagePath = guideFile.absolutePath,
-                originalImagePath = guideFile.absolutePath,
-                rotationDegrees = 0,
-                filterName = ScanFilter.MAGIC_COLOR.name,
-                ocrText = sampleOcrText
-            )
-        ))
-
         dao.insertDocument(DocumentEntity(
             id = docId,
             title = "Artify Scanner Welcome Guide",
@@ -367,6 +356,19 @@ class DocumentRepository(private val context: Context) {
             fileSizeBytes = samplePdf.length(),
             ocrFullText = sampleOcrText,
             tags = "Guide,Help,Welcome"
+        ))
+
+        dao.insertPages(listOf(
+            PageEntity(
+                id = "guide_page_1",
+                documentId = docId,
+                pageIndex = 0,
+                imagePath = guideFile.absolutePath,
+                originalImagePath = guideFile.absolutePath,
+                rotationDegrees = 0,
+                filterName = ScanFilter.MAGIC_COLOR.name,
+                ocrText = sampleOcrText
+            )
         ))
     }
 
@@ -463,19 +465,6 @@ class DocumentRepository(private val context: Context) {
             outputFile = samplePdf
         )
 
-        dao.insertPages(listOf(
-            PageEntity(
-                id = "invoice_page_1",
-                documentId = docId,
-                pageIndex = 0,
-                imagePath = invoiceFile.absolutePath,
-                originalImagePath = invoiceFile.absolutePath,
-                rotationDegrees = 0,
-                filterName = ScanFilter.MAGIC_COLOR.name,
-                ocrText = invoiceOcr
-            )
-        ))
-
         dao.insertDocument(DocumentEntity(
             id = docId,
             title = "Invoice - Acme Cloud Solutions",
@@ -489,6 +478,19 @@ class DocumentRepository(private val context: Context) {
             fileSizeBytes = samplePdf.length(),
             ocrFullText = invoiceOcr,
             tags = "Invoice,Acme,Cloud,Expense"
+        ))
+
+        dao.insertPages(listOf(
+            PageEntity(
+                id = "invoice_page_1",
+                documentId = docId,
+                pageIndex = 0,
+                imagePath = invoiceFile.absolutePath,
+                originalImagePath = invoiceFile.absolutePath,
+                rotationDegrees = 0,
+                filterName = ScanFilter.MAGIC_COLOR.name,
+                ocrText = invoiceOcr
+            )
         ))
     }
 
