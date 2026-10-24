@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import com.example.data.local.AppDatabase
 import com.example.data.local.DocumentEntity
+import com.example.data.local.OcrLinesJson
 import com.example.data.local.PageEntity
 import com.example.data.model.CapturedPage
 import com.example.data.model.DocumentCategory
