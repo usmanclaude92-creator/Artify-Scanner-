@@ -318,17 +318,42 @@ object ScanningSessionManager {
 
     fun updatePageFilter(context: Context, scope: CoroutineScope, pageId: String, newFilter: ScanFilter) {
         val index = capturedPages.indexOfFirst { it.id == pageId }
-        if (index != -1) {
-            val page = capturedPages[index]
-            capturedPages[index] = page.copy(filter = newFilter)
+        if (index == -1) return
+        val page = capturedPages[index]
+        capturedPages[index] = page.copy(filter = newFilter)
 
-            // Re-apply filter asynchronously
-            scope.launch(Dispatchers.IO) {
-                val origFile = File(page.originalImagePath)
-                val rawBitmap = ImageProcessor.decodeSampledBitmap(origFile) ?: return@launch
-                val corrected = ImageProcessor.applyPerspectiveCorrection(rawBitmap, page.cropPoints)
-                val filtered = ImageProcessor.applyFilter(corrected, newFilter)
-                ImageProcessor.saveBitmapToFile(filtered, File(page.localImagePath))
+        // Re-render into a NEW file: the image loader caches by path and would keep showing the old look
+        scope.launch(Dispatchers.IO) {
+            isProcessingCapture.value = true
+            statusMessage.value = "Applying ${newFilter.displayName}..."
+            var raw: Bitmap? = null
+            var corrected: Bitmap? = null
+            var filtered: Bitmap? = null
+            try {
+                raw = ImageProcessor.decodeSampledBitmap(File(page.originalImagePath), 3000, 4000) ?: return@launch
+                corrected = ImageProcessor.applyPerspectiveCorrection(raw, page.cropPoints)
+                filtered = ImageProcessor.applyFilter(corrected, newFilter)
+                val dir = File(context.cacheDir, "scan_session").apply { mkdirs() }
+                val newFile = File(dir, "proc_${UUID.randomUUID()}.jpg")
+                ImageProcessor.saveBitmapToFile(filtered, newFile, quality = 90)
+                withContext(Dispatchers.Main) {
+                    val idx = capturedPages.indexOfFirst { it.id == pageId }
+                    if (idx != -1 && capturedPages[idx].filter == newFilter) {
+                        val old = capturedPages[idx].localImagePath
+                        capturedPages[idx] = capturedPages[idx].copy(localImagePath = newFile.absolutePath)
+                        File(old).delete()
+                    } else {
+                        newFile.delete() // a newer filter choice superseded this one
+                    }
+                }
+            } finally {
+                if (filtered != null && filtered !== corrected) filtered.recycle()
+                if (corrected != null && corrected !== raw) corrected.recycle()
+                raw?.recycle()
+                withContext(NonCancellable + Dispatchers.Main) {
+                    isProcessingCapture.value = false
+                    statusMessage.value = null
+                }
             }
         }
     }

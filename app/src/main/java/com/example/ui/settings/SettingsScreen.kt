@@ -172,6 +172,41 @@ fun SettingsScreen() {
                 }
             }
 
+            item {
+                var diagnostics by remember { mutableStateOf<String?>(null) }
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable { diagnostics = com.example.camera.LensDiagnostics.describe(context) },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Camera diagnostics",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                        )
+                        Text(
+                            text = "Tap to list the cameras and lenses this phone exposes to apps (useful when the ultra-wide lens is missing).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                diagnostics?.let { text ->
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { diagnostics = null },
+                        title = { Text("Camera diagnostics") },
+                        text = {
+                            androidx.compose.foundation.text.selection.SelectionContainer {
+                                Text(text, style = MaterialTheme.typography.bodySmall)
+                            }
+                        },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = { diagnostics = null }) { Text("Close") }
+                        }
+                    )
+                }
+            }
+
             // Storage & Maintenance
             item {
                 Text(

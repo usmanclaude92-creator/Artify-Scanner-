@@ -82,8 +82,8 @@ fun CameraPreviewView(
     var zoomRatio by remember { mutableFloatStateOf(1f) }
     var minZoom by remember { mutableFloatStateOf(1f) }
     var maxZoom by remember { mutableFloatStateOf(5f) }
-    var wideAngle by remember { mutableStateOf(true) }
-    var wideAvailable by remember { mutableStateOf(false) }
+    var lenses by remember { mutableStateOf<List<LensOption>>(emptyList()) }
+    var lensIndex by remember { mutableStateOf(0) }
     var rebind: (() -> Unit)? by remember { mutableStateOf(null) }
     var lensReported by remember { mutableStateOf(false) }
     val autoCaptureEnabled by rememberUpdatedState(isAutoCapture)
@@ -157,8 +157,12 @@ fun CameraPreviewView(
                     val bind = {
                         // The viewport makes the captured photo match what the preview shows
                         val viewPort = view.viewPort
-                        val wideSelector = widestBackCameraSelector(cameraProvider)
-                        val cameraSelector = if (wideAngle) wideSelector.selector else CameraSelector.DEFAULT_BACK_CAMERA
+                        if (lenses.isEmpty()) {
+                            lenses = buildLensOptions(ctx, cameraProvider)
+                            // Start on the widest lens (smallest focal length), as scanning needs the whole page in view
+                            lensIndex = 0
+                        }
+                        val option = lenses.getOrNull(lensIndex)
                         try {
                             cameraProvider.unbindAll()
                             val group = UseCaseGroup.Builder()
@@ -168,10 +172,10 @@ fun CameraPreviewView(
                                 .apply { viewPort?.let { setViewPort(it) } }
                                 .build()
                             val bound = try {
-                                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, group)
+                                cameraProvider.bindToLifecycle(lifecycleOwner, option?.selector ?: CameraSelector.DEFAULT_BACK_CAMERA, group)
                             } catch (e: Exception) {
-                                // The wide lens could not be opened (some phones restrict it): use the main camera
-                                android.util.Log.w("Artify", "Wide lens bind failed", e)
+                                // That lens could not be opened (some phones restrict it): use the main camera
+                                android.util.Log.w("Artify", "Lens bind failed: ${option?.label}", e)
                                 cameraProvider.unbindAll()
                                 cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, group)
                             }
@@ -179,15 +183,23 @@ fun CameraPreviewView(
                             val zoomState = bound.cameraInfo.zoomState.value
                             minZoom = zoomState?.minZoomRatio ?: 1f
                             maxZoom = zoomState?.maxZoomRatio ?: 5f
-                            // Logical multi-camera phones expose the ultra-wide lens as zoom < 1x
-                            wideAvailable = wideSelector.isSeparateLens || minZoom < 1f
-                            val target = if (wideAngle) minZoom.coerceAtMost(1f) else 1f
+
+                            // A single logical camera may still reach its ultra-wide lens as zoom < 1x
+                            if (lenses.size <= 1 && minZoom < 1f) {
+                                lenses = listOf(
+                                    LensOption(CameraSelector.DEFAULT_BACK_CAMERA, "${"%.1f".format(minZoom)}x wide", 0f, zoomToMin = true),
+                                    LensOption(CameraSelector.DEFAULT_BACK_CAMERA, "1x main", 1f)
+                                )
+                                lensIndex = 0
+                            }
+                            val target = if (lenses.getOrNull(lensIndex)?.zoomToMin == true) minZoom else 1f
                             bound.cameraControl.setZoomRatio(target)
                             zoomRatio = target
-                            if (wideAngle && !lensReported) {
+
+                            if (!lensReported) {
                                 lensReported = true
-                                val msg = if (wideAvailable) "Ultra-wide camera active (${wideSelector.description})"
-                                else "No ultra-wide lens exposed to apps on this phone (${wideSelector.description})"
+                                val msg = if (lenses.size > 1) "Lenses found: ${lenses.joinToString { it.label }}. Tap the lens pill to switch."
+                                else "Only one camera lens is exposed to apps on this phone (see Settings > Camera diagnostics)."
                                 android.widget.Toast.makeText(ctx, msg, android.widget.Toast.LENGTH_LONG).show()
                             }
                         } catch (e: Exception) {
@@ -205,21 +217,21 @@ fun CameraPreviewView(
         // Viewfinder HUD Overlay with animated laser beam
         DocumentScanOverlay(isAutoCapture = isAutoCapture)
 
-        // Wide-angle / standard lens toggle
-        if (wideAvailable) {
+        // Lens switcher: cycles through every lens the phone exposes
+        if (lenses.size > 1) {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 210.dp)
                     .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
                     .clickable {
-                        wideAngle = !wideAngle
+                        lensIndex = (lensIndex + 1) % lenses.size
                         rebind?.invoke()
                     }
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(
-                    text = if (wideAngle) "Wide 0.5x" else "Standard 1x",
+                    text = "Lens: ${lenses.getOrNull(lensIndex)?.label ?: ""}",
                     color = Color(0xFF38BDF8),
                     fontWeight = FontWeight.Bold
                 )
@@ -263,57 +275,69 @@ fun takePhoto(
     )
 }
 
-private class WideSelector(val selector: CameraSelector, val isSeparateLens: Boolean, val description: String)
+/** One selectable lens. [focal] is the 35mm-equivalent focal length in mm (0 = unknown). */
+private class LensOption(
+    val selector: CameraSelector,
+    val label: String,
+    val focal: Float,
+    val zoomToMin: Boolean = false
+)
 
 /**
- * Picks the lens with the shortest 35mm-equivalent focal length (the ultra-wide). Looks at every back
- * camera CameraX lists and at the physical lenses behind each logical multi-camera.
+ * Lists every back lens the phone exposes, widest first: separate camera IDs CameraX knows, the physical
+ * lenses behind logical multi-cameras (via CameraX and Camera2), each selectable on its own.
  */
 @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
-private fun widestBackCameraSelector(provider: ProcessCameraProvider): WideSelector {
-    var description = "no wide lens found"
-    val default = { WideSelector(CameraSelector.DEFAULT_BACK_CAMERA, false, description) }
+private fun buildLensOptions(context: Context, provider: ProcessCameraProvider): List<LensOption> {
+    val default = listOf(LensOption(CameraSelector.DEFAULT_BACK_CAMERA, "main", 0f))
     return try {
+        val mgr = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
         val backInfos = provider.availableCameraInfos.filter { it.lensFacing == CameraSelector.LENS_FACING_BACK }
+        if (backInfos.isEmpty()) return default
 
-        fun equivalentFocal(info: CameraInfo): Float {
-            val c2 = Camera2CameraInfo.from(info)
-            val focal = c2.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                ?.minOrNull() ?: return Float.MAX_VALUE
-            val sensorWidth = c2.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.width
-                ?: return Float.MAX_VALUE
-            return focal * 36f / sensorWidth
+        val raw = ArrayList<Triple<CameraSelector, Float, String>>() // selector, focal, id
+        fun logicalSelector(id: String, physical: String?): CameraSelector {
+            val b = CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .addCameraFilter { infos ->
+                    infos.filter { Camera2CameraInfo.from(it).cameraId == id }.ifEmpty { infos }
+                }
+            physical?.let { b.setPhysicalCameraId(it) }
+            return b.build()
         }
 
-        // (logical camera, physical camera id or null, equivalent focal length)
-        data class Lens(val logical: CameraInfo, val physicalId: String?, val focal: Float)
-
-        val lenses = ArrayList<Lens>()
         for (logical in backInfos) {
-            lenses.add(Lens(logical, null, equivalentFocal(logical)))
-            for (physical in logical.physicalCameraInfos) {
-                lenses.add(Lens(logical, Camera2CameraInfo.from(physical).cameraId, equivalentFocal(physical)))
+            val id = Camera2CameraInfo.from(logical).cameraId
+            val logicalFocal = LensDiagnostics.equivalentFocal(mgr.getCameraCharacteristics(id)) ?: 0f
+            raw.add(Triple(logicalSelector(id, null), logicalFocal, id))
+            val physicalIds = LinkedHashSet<String>()
+            logical.physicalCameraInfos.forEach { physicalIds.add(Camera2CameraInfo.from(it).cameraId) }
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                physicalIds.addAll(mgr.getCameraCharacteristics(id).physicalCameraIds)
+            }
+            for (pid in physicalIds) {
+                val f = try { LensDiagnostics.equivalentFocal(mgr.getCameraCharacteristics(pid)) } catch (e: Exception) { null } ?: continue
+                raw.add(Triple(logicalSelector(id, pid), f, "$id/$pid"))
             }
         }
-        val summary = lenses.joinToString { "${it.physicalId ?: Camera2CameraInfo.from(it.logical).cameraId}:${"%.0f".format(it.focal)}mm" }
-        android.util.Log.i("Artify", "Back lenses: $summary")
 
-        val widest = lenses.filter { it.focal < Float.MAX_VALUE }.minByOrNull { it.focal }
-        val mainFocal = lenses.firstOrNull()?.focal ?: Float.MAX_VALUE
-        description = "${backInfos.size} back cameras, lenses [$summary]"
-        if (widest == null || widest.focal > mainFocal * 0.85f) return default()
-
-        val logicalId = Camera2CameraInfo.from(widest.logical).cameraId
-        val builder = CameraSelector.Builder()
-            .requireLensFacing(CameraSelector.LENS_FACING_BACK)
-            .addCameraFilter { infos ->
-                infos.filter { Camera2CameraInfo.from(it).cameraId == logicalId }.ifEmpty { infos }
+        // Keep one option per distinct focal length (physical lenses repeat the logical camera's main lens)
+        val distinct = raw.filter { it.second > 0f }
+            .sortedBy { it.second }
+            .fold(ArrayList<Triple<CameraSelector, Float, String>>()) { acc, t ->
+                if (acc.none { kotlin.math.abs(it.second - t.second) < 0.12f * t.second }) acc.add(t)
+                acc
             }
-        widest.physicalId?.let { builder.setPhysicalCameraId(it) }
-        WideSelector(builder.build(), true, "wide lens ${"%.0f".format(widest.focal)}mm (main ${"%.0f".format(mainFocal)}mm)")
+        android.util.Log.i("Artify", "Lens options: " + raw.joinToString { "${it.third}:${"%.0f".format(it.second)}mm" })
+        if (distinct.size < 2) return default
+
+        val mainFocal = raw.first().second.takeIf { it > 0f } ?: distinct.first().second
+        distinct.map {
+            LensOption(it.first, "${"%.1f".format(it.second / mainFocal)}x (${"%.0f".format(it.second)}mm)", it.second)
+        }
     } catch (e: Exception) {
-        android.util.Log.w("Artify", "Wide-angle lens lookup failed", e)
-        WideSelector(CameraSelector.DEFAULT_BACK_CAMERA, false, "lens lookup failed: ${e.message}")
+        android.util.Log.w("Artify", "Lens lookup failed", e)
+        default
     }
 }
 
