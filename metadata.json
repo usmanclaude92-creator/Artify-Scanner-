@@ -1,0 +1,6 @@
+{
+  "name": "Artify Scanner",
+  "description": "Every Document. Perfectly Captured. Advanced continuous document scanning, PDF engine, OCR, and document productivity tools.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

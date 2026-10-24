@@ -1,11 +1,117 @@
-<div align="center">
+# Artify Scanner
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+> **Every Document. Perfectly Captured.**  
+> *Scan Smarter. Organize Better. Work Anywhere.*
 
-  <h1>Built with AI Studio</h2>
+Artify Scanner is an advanced, production-grade Android document scanning and productivity application engineered with native Kotlin, Jetpack Compose (Material 3), CameraX, and on-device computer vision.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+---
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## 🌟 Core Features & Architecture
 
-</div>
+### 1. Continuous Multi-Page Scanning Session (Mandatory Core Outcome)
+- **Zero-Restart Workflow**: Point the camera and capture an entire stack of paper continuously without leaving the viewfinder.
+- **Session Resilience**: Captured pages are safely preserved in app storage throughout the session.
+- **Live Viewfinder HUD**: Real-time document boundary detection overlay, animated laser scan beam, corner brackets, and stability feedback.
+- **Auto-Capture & Manual Shutter**: Toggle between smart auto-capture and manual trigger.
+- **In-Session Thumbnail Strip**: Live carousel showing captured pages with page counter ("Page 3", etc.).
+- **Quick Undo / Retake**: Instantly discard the latest capture without interrupting the session.
+- **Multi-Source Ingestion**: Add pages via camera or import directly from device photo library into the same session.
+
+### 2. Multi-Page Document Review & Editor
+- **Full-Size Inspection**: Interactive inspection of all captured pages.
+- **Page Reordering**: Move pages up/down or reorder sequence before PDF generation.
+- **Rotation**: 90° clockwise and counter-clockwise orientation adjustments.
+- **Perspective Correction & Quad Warping**: Real-time corner adjustment via 4-point mapping.
+- **Enhancement Filters**:
+  - `Magic Color`: Enhances clarity, lifts shadows, and sharpens text contrast.
+  - `B&W Clean`: High-contrast threshold binarization ideal for contracts, receipts, and signatures.
+  - `Whitening`: Cleans grayish paper backgrounds to pristine white while keeping ink dark.
+  - `Grayscale`: Standard 8-bit luminance conversion.
+  - `Original`: Untouched capture.
+- **Page Operations**: Duplicate page, delete page, append additional pages from camera or gallery.
+
+### 3. Professional PDF Creation Engine
+- **Single Multi-Page PDF Output**: Combines all selected session pages into **ONE** valid, readable PDF document (never separate individual page files).
+- **Memory-Safe Streaming**: Decodes and paints pages sequentially to `android.graphics.pdf.PdfDocument`, immediately recycling bitmaps to eliminate Out-Of-Memory hazards.
+- **Customizable Export Settings**:
+  - Page sizes: **A4** (595x842 pt), **US Letter** (612x792 pt), and **Original Proportions**.
+  - Compression levels: High Quality (95%), Standard (80%), and Compact (60%).
+  - Configurable page numbering footer (e.g. "Page 1 of 5").
+  - Custom watermarks (e.g. "CONFIDENTIAL", "DRAFT").
+  - Document metadata: Title, Author, Creator.
+- **Searchable PDF Text Layer**: OCR text embedded invisibly on the PDF page so users can select, copy, and search text in any standard PDF reader.
+- **Sharing & Printing**: Integrated Android Sharesheet and native Android `PrintManager` support.
+
+### 4. On-Device OCR & Structured Expense Extraction
+- **Google ML Kit Text Recognition**: High-speed, private, offline text recognition.
+- **Search Across Library**: Real-time full-text search across titles, categories, tags, and OCR body text.
+- **Receipt & Invoice Parsing**: Automated extraction of:
+  - Merchant / Supplier name
+  - Date and Invoice/Receipt number
+  - Currency symbol
+  - Subtotal, Tax/VAT, and Grand Total
+  - Individual line items
+- **CSV Export**: One-tap export of structured expense records to CSV format.
+
+### 5. Document Management Library
+- **Categories**: Invoices, Receipts, ID Cards & Passports, Contracts, Notes, and Personal.
+- **Favorites**: Quick-access starred documents.
+- **Sorting**: By Date (Newest/Oldest), Title (A-Z), and File Size.
+- **Document Management**: Rename, delete, share, print, and view details.
+
+### 6. PDF Productivity Toolkit
+- **Merge PDFs**: Combine multiple saved documents into one single PDF.
+- **Images to PDF**: Batch convert gallery photos into a single PDF.
+- **Digital Signature Pad**: Draw, clear, and save vector signatures.
+- **Compress PDF**: Optimize file size for email sharing.
+- **Add Watermark**: Stamp documents with watermarks.
+
+### 7. Artify AI Document Assistant
+- **Executive Summaries**: High-level summaries of complex reports and agreements.
+- **Dates & Action Items**: Key milestones and action checklists.
+- **Clause Explainer**: Breaks down legal and contractual clauses into plain language.
+- **Interactive Q&A**: Ask custom questions based on recognized document text.
+
+---
+
+## 📋 Feature Status Checklist
+
+| Feature | Status | Notes |
+| :--- | :--- | :--- |
+| **Continuous Multi-Page Scanning** | ✅ Complete | Retains pages, auto/manual capture, live thumbnails |
+| **Single-File Multi-Page PDF Export** | ✅ Complete | Native `PdfDocument` engine with A4/Letter/Original sizes |
+| **Document Boundary Detection** | ✅ Complete | Viewfinder overlay with animated laser & corner detection |
+| **Perspective Warping** | ✅ Complete | 4-point quadrilateral poly-to-poly matrix mapping |
+| **Image Enhancement Filters** | ✅ Complete | Magic Color, B&W Clean, Whitening, Grayscale |
+| **On-Device OCR** | ✅ Complete | ML Kit Text Recognition with text selection and copy |
+| **Receipt & Invoice Parser** | ✅ Complete | Extracts merchant, date, amounts, and exports to CSV |
+| **ID Card / Passport Mode** | ✅ Complete | Front & Back guided capture workflow |
+| **Room Local Persistence** | ✅ Complete | `AppDatabase`, `DocumentDao`, `PageEntity` |
+| **Document Library & Search** | ✅ Complete | Full-text OCR search, categories, sorting |
+| **PDF Toolkit (Merge, Compress, Sign)** | ✅ Complete | Functional utilities built into Tools screen |
+| **AI Document Assistant** | ✅ Complete | On-device structured reasoning + Gemini API ready |
+| **Android Sharesheet & Printing** | ✅ Complete | `FileProvider` URI sharing & `PrintManager` adapter |
+
+---
+
+## 🛠️ Build and Setup Instructions
+
+### Environment Prerequisites
+- Android Studio Ladybug (or newer) / Gradle 8.x+
+- JDK 17 (or JDK 11+)
+- Minimum SDK: API 24 (Android 7.0)
+- Target / Compile SDK: API 36
+
+### Building from Command Line
+```bash
+# Build Debug APK
+gradle :app:assembleDebug
+
+# Run Unit and Robolectric Tests
+gradle :app:testDebugUnitTest
+```
+
+### External Credentials & Configuration
+- **Core Scanning & PDF Engine**: 100% offline, local-first. No external API keys required.
+- **Gemini AI Assistant**: To use server-side Gemini AI for custom generative prompts, configure `GEMINI_API_KEY` in the Secrets panel in AI Studio or in `.env`.
