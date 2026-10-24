@@ -93,7 +93,7 @@ object OcrEngine {
         // 3. Invoice / Receipt Number
         var invoiceNum = ""
         val invPattern = Pattern.compile(
-            "(invoice|inv|receipt|bill|order|ref|ticket)\\s*[:#.]?\\s*([A-Z0-9_-]{3,20})",
+            "\\b(invoice|inv|receipt|bill|order|ref|ticket)\\b[\\s:#.]*([A-Z0-9][A-Z0-9_-]{2,19})",
             Pattern.CASE_INSENSITIVE
         )
         for (line in lines) {
@@ -116,9 +116,9 @@ object OcrEngine {
         var subtotal = ""
         var tax = ""
 
-        val totalPattern = Pattern.compile("(total|grand total|amount due|balance due)\\s*[:$€£]?\\s*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
-        val subtotalPattern = Pattern.compile("(subtotal|sub-total|sub total|net)\\s*[:$€£]?\\s*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
-        val taxPattern = Pattern.compile("(tax|vat|gst|sales tax)\\s*[:$€£]?\\s*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
+        val totalPattern = Pattern.compile("(total|grand total|amount due|balance due)[\\s:$€£]*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
+        val subtotalPattern = Pattern.compile("(subtotal|sub-total|sub total|net)[\\s:$€£]*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
+        val taxPattern = Pattern.compile("(tax|vat|gst|sales tax)[\\s:$€£]*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
 
         for (line in lines) {
             if (total.isBlank()) {
