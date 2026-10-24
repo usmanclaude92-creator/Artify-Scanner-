@@ -387,7 +387,15 @@ object ImageProcessor {
         fun pt(idx: Int) = PointF(((idx % w) + 0.5f) / w, ((idx / w) + 0.5f) / h)
         val result = NormalizedCornerPoints(pt(tl), pt(tr), pt(br), pt(bl))
 
-        // 6. Reject degenerate quads (shoelace area)
+        // 6. Reject implausible quads: tiny sides, extreme aspect ratio, or too little area
+        fun dist(a: PointF, b: PointF) = sqrt(((a.x - b.x) * bitmap.width).let { it * it } + ((a.y - b.y) * bitmap.height).let { it * it })
+        val top = dist(result.topLeft, result.topRight)
+        val bottom = dist(result.bottomLeft, result.bottomRight)
+        val left = dist(result.topLeft, result.bottomLeft)
+        val right = dist(result.topRight, result.bottomRight)
+        val minSide = min(min(top, bottom), min(left, right))
+        val aspect = (top + bottom) / (left + right)
+        if (minSide < 0.2f * min(bitmap.width, bitmap.height) || aspect < 0.3f || aspect > 3.5f) return fallback
         val q = listOf(result.topLeft, result.topRight, result.bottomRight, result.bottomLeft)
         var area = 0f
         for (i in q.indices) {

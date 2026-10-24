@@ -335,7 +335,21 @@ class StabilityDetector(
             stableSince = now
             return false
         }
-        if (contrast < 12.0 || now - lastTrigger < cooldownMillis) return false
+        // A page sits in the middle and is brighter than its surroundings; this rejects laps, walls and floors
+        var centerSum = 0.0
+        var centerN = 0
+        var ringSum = 0.0
+        var ringN = 0
+        for (gy in 0 until grid) {
+            for (gx in 0 until grid) {
+                val inCenter = gx in 6 until 18 && gy in 6 until 18
+                val onRing = gx < 3 || gx >= grid - 3 || gy < 3 || gy >= grid - 3
+                if (inCenter) { centerSum += sample[gy * grid + gx]; centerN++ }
+                if (onRing) { ringSum += sample[gy * grid + gx]; ringN++ }
+            }
+        }
+        val pageLike = centerSum / centerN - ringSum / ringN > 20.0 && centerSum / centerN > 110.0
+        if (!pageLike || contrast < 12.0 || now - lastTrigger < cooldownMillis) return false
         if (now - stableSince >= stableMillis) {
             lastTrigger = now
             stableSince = now

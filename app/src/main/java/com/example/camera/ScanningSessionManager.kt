@@ -141,7 +141,8 @@ object ScanningSessionManager {
     suspend fun addPageFromBitmap(
         context: Context,
         rawBitmap: Bitmap,
-        filter: ScanFilter = ScanFilter.MAGIC_COLOR
+        filter: ScanFilter = ScanFilter.MAGIC_COLOR,
+        autoCrop: Boolean = true
     ): CapturedPage = withContext(Dispatchers.IO) {
         isProcessingCapture.value = true
         statusMessage.value = "Enhancing document..."
@@ -158,7 +159,9 @@ object ScanningSessionManager {
             ImageProcessor.saveBitmapToFile(rawBitmap, originalFile, quality = 95)
 
             // 2. Detect corners and apply perspective & filter
-            val corners = ImageProcessor.detectDocumentCorners(rawBitmap)
+            val corners = if (autoCrop) ImageProcessor.detectDocumentCorners(rawBitmap) else NormalizedCornerPoints(
+                PointF(0f, 0f), PointF(1f, 0f), PointF(1f, 1f), PointF(0f, 1f)
+            )
             correctedBitmap = ImageProcessor.applyPerspectiveCorrection(rawBitmap, corners)
             filteredBitmap = ImageProcessor.applyFilter(correctedBitmap, filter)
 
@@ -210,7 +213,8 @@ object ScanningSessionManager {
     suspend fun addPageFromUri(
         context: Context,
         uri: Uri,
-        filter: ScanFilter = ScanFilter.MAGIC_COLOR
+        filter: ScanFilter = ScanFilter.MAGIC_COLOR,
+        autoCrop: Boolean = true
     ): CapturedPage? = withContext(Dispatchers.IO) {
         // Copy to a temp file first so large photos can be decoded down-sampled
         val temp = File(context.cacheDir, "import_${UUID.randomUUID()}.tmp")
@@ -222,7 +226,7 @@ object ScanningSessionManager {
             } ?: return@withContext null
             val bitmap = ImageProcessor.decodeSampledBitmap(temp, reqWidth = 3000, reqHeight = 4000)
                 ?: return@withContext null
-            addPageFromBitmap(context, bitmap, filter)
+            addPageFromBitmap(context, bitmap, filter, autoCrop)
         } catch (e: Exception) {
             android.util.Log.e("ScanningSession", "Image import failed", e)
             null

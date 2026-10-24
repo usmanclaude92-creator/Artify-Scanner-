@@ -4,6 +4,11 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
+import androidx.compose.material.icons.filled.DocumentScanner
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.ImageCapture
@@ -123,6 +128,38 @@ fun CameraScannerScreen(
         }
     }
 
+    // Google's ML Kit Document Scanner: live edge detection, auto-capture, crop and enhancement
+    val smartScanLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val scan = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+        if (result.resultCode == android.app.Activity.RESULT_OK && scan != null) {
+            scope.launch {
+                for (page in scan.pages.orEmpty()) {
+                    ScanningSessionManager.addPageFromUri(context, page.imageUri, ScanFilter.ORIGINAL, autoCrop = false)
+                }
+            }
+        }
+    }
+
+    fun startSmartScan() {
+        val activity = context as? android.app.Activity ?: return
+        val options = GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(true)
+            .setPageLimit(30)
+            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+        GmsDocumentScanning.getClient(options)
+            .getStartScanIntent(activity)
+            .addOnSuccessListener { sender ->
+                smartScanLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+            .addOnFailureListener {
+                Toast.makeText(context, "Smart Scan unavailable: ${it.message}", Toast.LENGTH_LONG).show()
+            }
+    }
+
     var activeImageCapture: ImageCapture? by remember { mutableStateOf(null) }
 
     fun captureFromCamera() {
@@ -235,6 +272,22 @@ fun CameraScannerScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Smart Scan (Google document scanner with accurate edge detection)
+                IconButton(
+                    onClick = { startSmartScan() },
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF0284C7))
+                        .testTag("camera_smart_scan")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DocumentScanner,
+                        contentDescription = "Smart Scan",
+                        tint = Color.White
+                    )
+                }
+
                 // Flash Toggle
                 IconButton(
                     onClick = {
