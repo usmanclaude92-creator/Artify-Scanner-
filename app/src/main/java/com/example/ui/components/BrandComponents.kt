@@ -58,8 +58,13 @@ fun BrandHeader(modifier: Modifier = Modifier, trailing: @Composable () -> Unit 
 
 /** Screen title block, e.g. "Tools" with a one-line description. */
 @Composable
-fun ScreenTitle(title: String, subtitle: String? = null, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
+fun ScreenTitle(
+    title: String,
+    subtitle: String? = null,
+    modifier: Modifier = Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp
+) {
+    Column(modifier = modifier.padding(horizontal = horizontalPadding, vertical = 14.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium)
         if (subtitle != null) {
             Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

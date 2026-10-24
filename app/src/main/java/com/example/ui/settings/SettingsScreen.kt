@@ -86,10 +86,10 @@ fun SettingsScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item { ScreenTitle("Settings", "Customize your experience") }
+            item { ScreenTitle("Settings", "Customize your experience", horizontalPadding = 0.dp) }
 
             // Appearance
             item {
