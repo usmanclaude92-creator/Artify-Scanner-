@@ -98,30 +98,7 @@ fun SettingsScreen() {
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Brand + Appearance
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    androidx.compose.foundation.Image(
-                        painter = androidx.compose.ui.res.painterResource(com.example.R.drawable.logo_icon),
-                        contentDescription = "Artify Scanner logo",
-                        modifier = Modifier.size(52.dp).clip(RoundedCornerShape(14.dp))
-                    )
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text("Artify Scanner", style = MaterialTheme.typography.titleMedium)
-                        Text("Version 1.0 · all scans stay on this device", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-
+            // Appearance
             item {
                 Column(
                     modifier = Modifier
@@ -420,15 +397,11 @@ fun SettingsScreen() {
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color(0xFF0284C7)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.DocumentScanner, null, tint = Color.White)
-                            }
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(com.example.R.drawable.logo_icon),
+                                contentDescription = "Artify Scanner logo",
+                                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp))
+                            )
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
@@ -436,7 +409,7 @@ fun SettingsScreen() {
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                 )
                                 Text(
-                                    text = "Version 1.0 • Enterprise Edition",
+                                    text = "Version 1.0",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
