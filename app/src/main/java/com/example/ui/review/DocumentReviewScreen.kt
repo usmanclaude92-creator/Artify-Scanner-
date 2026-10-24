@@ -203,13 +203,8 @@ fun DocumentReviewScreen(
                 title = {
                     Column {
                         Text(
-                            text = "Review Document",
+                            text = "Edit Document",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "${pages.size} ${if (pages.size == 1) "page" else "pages"} • Continuous Session",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
@@ -222,6 +217,12 @@ fun DocumentReviewScreen(
                     }
                 },
                 actions = {
+                    Text(
+                        text = "${if (pages.isEmpty()) 0 else selectedPageIndex + 1}/${pages.size}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 4.dp)
+                    )
                     // Add more from camera
                     IconButton(
                         onClick = onAddPages,
@@ -260,6 +261,7 @@ fun DocumentReviewScreen(
                 ) {
                     OutlinedButton(
                         onClick = onAddPages,
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -272,13 +274,14 @@ fun DocumentReviewScreen(
                         modifier = Modifier
                             .weight(1.5f)
                             .testTag("save_pdf_button"),
+                        shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("Next", fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Save as PDF (${pages.size}p)")
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 }
             }

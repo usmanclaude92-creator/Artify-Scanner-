@@ -5,6 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import com.example.ui.theme.BrandViolet
+import com.example.ui.theme.BrandOrange
+import com.example.ui.theme.BrandGreen
+import com.example.ui.theme.BrandBlue
+import com.example.ui.components.ActionCard
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -222,41 +229,38 @@ fun AiAssistantScreen(
                 }
             }
 
-            // Quick Prompt Suggestions
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = false,
-                    onClick = {
-                        val prompt = "Summarize this document"
-                        messages.add(ChatMessage(isUser = true, text = prompt))
-                        generateLocalOrApiAnalysis(prompt, selectedDoc)
-                    },
-                    label = { Text("Summarize Document") }
-                )
-                FilterChip(
-                    selected = false,
-                    onClick = {
-                        val prompt = "Extract key dates and actions"
-                        messages.add(ChatMessage(isUser = true, text = prompt))
-                        generateLocalOrApiAnalysis(prompt, selectedDoc)
-                    },
-                    label = { Text("Dates & Action Items") }
-                )
-                FilterChip(
-                    selected = false,
-                    onClick = {
-                        val prompt = "Explain clauses in plain language"
-                        messages.add(ChatMessage(isUser = true, text = prompt))
-                        generateLocalOrApiAnalysis(prompt, selectedDoc)
-                    },
-                    label = { Text("Explain Clauses") }
-                )
+            // Template-style action list, shown until the conversation starts
+            if (messages.size <= 1 && !isThinking) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("How can I help you today?", style = MaterialTheme.typography.titleMedium)
+                    listOf(
+                        Triple("Extract Data", "From this document", "Extract the key data (names, dates, amounts, reference numbers) from this document as a list"),
+                        Triple("Summarize", "Get a quick summary", "Summarize this document"),
+                        Triple("Translate", "Into English", "Translate this document into English"),
+                        Triple("Find Information", "Dates, amounts, obligations", "Find the important dates, amounts and obligations in this document")
+                    ).forEachIndexed { i, (title, sub, prompt) ->
+                        val tints = listOf(BrandBlue, BrandViolet, BrandGreen, BrandOrange)
+                        ActionCard(
+                            title = title,
+                            subtitle = sub,
+                            icon = when (i) {
+                                0 -> Icons.Default.Description
+                                1 -> Icons.Default.AutoAwesome
+                                2 -> Icons.Default.Language
+                                else -> Icons.Default.Search
+                            },
+                            tint = tints[i],
+                            onClick = {
+                                messages.add(ChatMessage(isUser = true, text = prompt))
+                                generateLocalOrApiAnalysis(prompt, selectedDoc)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
             }
 
             // Chat Messages Stream

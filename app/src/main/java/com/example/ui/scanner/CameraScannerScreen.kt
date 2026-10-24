@@ -181,10 +181,14 @@ fun CameraScannerScreen(
             initial = pendingCropGuess ?: NormalizedCornerPoints(
                 PointF(0.04f, 0.04f), PointF(0.96f, 0.04f), PointF(0.96f, 0.96f), PointF(0.04f, 0.96f)
             ),
-            onDismiss = { pendingCropPage = null },
+            onDismiss = {
+                pendingCropPage = null
+                if (ScanningSessionManager.scanMode.value == ScanMode.SINGLE_PAGE) onFinishScanning()
+            },
             onConfirm = { corners ->
                 pendingCropPage = null
                 ScanningSessionManager.updatePageCrop(context, scope, page.id, corners)
+                if (ScanningSessionManager.scanMode.value == ScanMode.SINGLE_PAGE) onFinishScanning()
             }
         )
     }
@@ -203,6 +207,8 @@ fun CameraScannerScreen(
                     if (detected == null || ScanningSessionManager.confirmCropAfterCapture.value) {
                         pendingCropPage = page
                         pendingCropGuess = detected
+                    } else if (ScanningSessionManager.scanMode.value == ScanMode.SINGLE_PAGE) {
+                        onFinishScanning()
                     }
                 }
             },
@@ -313,8 +319,8 @@ fun CameraScannerScreen(
                     .testTag("camera_back_button")
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
                     tint = Color.White
                 )
             }
@@ -532,6 +538,32 @@ fun CameraScannerScreen(
                 }
             }
 
+            // Single | Multi-Page selector
+            if (ScanningSessionManager.scanMode.value == ScanMode.BATCH_DOCUMENTS ||
+                ScanningSessionManager.scanMode.value == ScanMode.SINGLE_PAGE
+            ) {
+                Row(
+                    modifier = Modifier
+                        .padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(Color.White.copy(alpha = 0.12f))
+                        .padding(3.dp)
+                ) {
+                    listOf(ScanMode.SINGLE_PAGE to "Single", ScanMode.BATCH_DOCUMENTS to "Multi-Page").forEach { (mode, label) ->
+                        val selected = ScanningSessionManager.scanMode.value == mode
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(19.dp))
+                                .background(if (selected) Color(0xFF1E6BFF) else Color.Transparent)
+                                .clickable { ScanningSessionManager.scanMode.value = mode }
+                                .padding(horizontal = 22.dp, vertical = 8.dp)
+                        ) {
+                            Text(label, color = Color.White, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+            }
+
             // Primary Control Row: Gallery Import, Shutter Button, Undo/Finish
             Row(
                 modifier = Modifier
@@ -541,19 +573,22 @@ fun CameraScannerScreen(
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
                 // Gallery import
-                IconButton(
-                    onClick = { galleryLauncher.launch("image/*") },
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.15f))
-                        .testTag("gallery_import_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PhotoLibrary,
-                        contentDescription = "Import Gallery",
-                        tint = Color.White
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = { galleryLauncher.launch("image/*") },
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .testTag("gallery_import_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Import Gallery",
+                            tint = Color.White
+                        )
+                    }
+                    Text("Gallery", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
                 }
 
                 // Shutter Button (Prominent circular trigger)
@@ -571,39 +606,48 @@ fun CameraScannerScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(60.dp)
+                            .size(62.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFF0284C7))
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "Capture",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .size(32.dp)
-                        )
-                    }
+                            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color(0xFF2AA5FF), Color(0xFF1E6BFF))))
+                    )
                 }
 
                 // Undo / Finish Scanning
                 if (ScanningSessionManager.capturedPages.isNotEmpty()) {
-                    IconButton(
-                        onClick = { ScanningSessionManager.removeLastPage() },
-                        modifier = Modifier
-                            .size(50.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .testTag("undo_page_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Undo,
-                            contentDescription = "Undo Last Page",
-                            tint = Color.White
-                        )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = { ScanningSessionManager.removeLastPage() },
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.15f))
+                                .testTag("undo_page_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Undo,
+                                contentDescription = "Undo Last Page",
+                                tint = Color.White
+                            )
+                        }
+                        Text("Undo", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
                     }
                 } else {
-                    Spacer(modifier = Modifier.size(50.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = { ScanningSessionManager.isFlashOn.value = !ScanningSessionManager.isFlashOn.value },
+                            modifier = Modifier
+                                .size(50.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.15f))
+                        ) {
+                            Icon(
+                                imageVector = if (ScanningSessionManager.isFlashOn.value) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                                contentDescription = "Flash",
+                                tint = if (ScanningSessionManager.isFlashOn.value) Color(0xFFFBBF24) else Color.White
+                            )
+                        }
+                        Text("Flash", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp)
+                    }
                 }
             }
 
@@ -618,7 +662,7 @@ fun CameraScannerScreen(
                         .testTag("finish_scanning_button"),
                     shape = RoundedCornerShape(25.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF0284C7)
+                        containerColor = Color(0xFF1E6BFF)
                     )
                 ) {
                     Text(

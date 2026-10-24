@@ -8,6 +8,13 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.net.Uri
 import android.widget.Toast
+import com.example.ui.theme.BrandViolet
+import com.example.ui.theme.BrandPink
+import com.example.ui.theme.BrandOrange
+import com.example.ui.theme.BrandGreen
+import com.example.ui.theme.BrandBlue
+import com.example.ui.components.ToolTile
+import com.example.ui.components.ScreenTitle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -321,85 +328,63 @@ fun PdfToolsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "PDF Toolkit",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-            )
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
+    ) {
+        ScreenTitle("Tools", "Powerful tools for your documents")
+
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Text(
-                    text = "Professional PDF Operations",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ToolTile(
+                    title = "Merge PDF", subtitle = "Combine multiple files",
+                    icon = Icons.Default.CallMerge, tint = BrandBlue,
+                    onClick = { showMergeDialog = true },
+                    modifier = Modifier.weight(1f)
+                )
+                ToolTile(
+                    title = "Images to PDF", subtitle = "Photos into one PDF",
+                    icon = Icons.Default.Image, tint = BrandGreen,
+                    onClick = { imagesToPdfLauncher.launch("image/*") },
+                    modifier = Modifier.weight(1f)
                 )
             }
-
-            item {
-                PdfToolCard(
-                    title = "Merge Multiple PDFs",
-                    description = "Combine 2 or more scanned documents into one unified, multi-page PDF.",
-                    icon = Icons.Default.CallMerge,
-                    iconTint = androidx.compose.ui.graphics.Color(0xFF0284C7),
-                    onClick = { showMergeDialog = true }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ToolTile(
+                    title = "Compress PDF", subtitle = "Reduce file size",
+                    icon = Icons.Default.Straighten, tint = BrandOrange,
+                    onClick = {
+                        if (allDocs.isEmpty()) Toast.makeText(context, "No documents available to compress", Toast.LENGTH_SHORT).show()
+                        else pickerAction = "compress"
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                ToolTile(
+                    title = "Sign", subtitle = "Draw your signature",
+                    icon = Icons.Default.Draw, tint = BrandViolet,
+                    onClick = { showSignatureDialog = true },
+                    modifier = Modifier.weight(1f)
                 )
             }
-
-            item {
-                PdfToolCard(
-                    title = "Images to PDF",
-                    description = "Batch select multiple photos from gallery and convert into a clean PDF document.",
-                    icon = Icons.Default.Image,
-                    iconTint = androidx.compose.ui.graphics.Color(0xFF10B981),
-                    onClick = { imagesToPdfLauncher.launch("image/*") }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ToolTile(
+                    title = "Watermark", subtitle = "Stamp every page",
+                    icon = Icons.Default.BrandingWatermark, tint = BrandPink,
+                    onClick = {
+                        if (allDocs.isEmpty()) Toast.makeText(context, "No documents available to watermark", Toast.LENGTH_SHORT).show()
+                        else pickerAction = "watermark"
+                    },
+                    modifier = Modifier.weight(1f)
                 )
-            }
-
-            item {
-                PdfToolCard(
-                    title = "Digital Signature Pad",
-                    description = "Draw and save your handwritten signature for signing contracts and invoices.",
-                    icon = Icons.Default.Draw,
-                    iconTint = androidx.compose.ui.graphics.Color(0xFF8B5CF6),
-                    onClick = { showSignatureDialog = true }
-                )
-            }
-
-            item {
-                PdfToolCard(
-                    title = "Compress PDF",
-                    description = "Reduce file size with smart JPEG downsampling while preserving clear, readable text.",
-                    icon = Icons.Default.Straighten,
-                    iconTint = androidx.compose.ui.graphics.Color(0xFFF59E0B),
-                    onClick = { if (allDocs.isEmpty()) Toast.makeText(context, "No documents available to compress", Toast.LENGTH_SHORT).show() else pickerAction = "compress" }
-                )
-            }
-
-            item {
-                PdfToolCard(
-                    title = "Add Watermark",
-                    description = "Add 'CONFIDENTIAL', 'ORIGINAL', or custom watermarks across all document pages.",
-                    icon = Icons.Default.BrandingWatermark,
-                    iconTint = androidx.compose.ui.graphics.Color(0xFFEC4899),
-                    onClick = { if (allDocs.isEmpty()) Toast.makeText(context, "No documents available to watermark", Toast.LENGTH_SHORT).show() else pickerAction = "watermark" }
-                )
+                Spacer(Modifier.weight(1f))
             }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }
 
