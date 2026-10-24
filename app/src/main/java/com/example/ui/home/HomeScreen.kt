@@ -292,12 +292,20 @@ fun HomeScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ActionCard(
+                        title = "Single Page", subtitle = "One document",
+                        icon = Icons.Default.CameraAlt, tint = BrandOrange,
+                        onClick = {
+                            ScanningSessionManager.startNewSession(ScanMode.SINGLE_PAGE)
+                            onStartScan(ScanMode.SINGLE_PAGE)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ActionCard(
                         title = "PDF Tools", subtitle = "Merge & Sign",
                         icon = Icons.Default.DocumentScanner, tint = BrandPink,
                         onClick = onNavigateToTools,
                         modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.weight(1f))
                 }
             }
         }

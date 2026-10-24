@@ -30,6 +30,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,25 +63,32 @@ fun maxPagesFor(mode: ScanMode): Int = when (mode) {
 }
 
 /**
- * Pre-camera screen: an animated scanning frame (dotted border, moving scan line) plus the scan mode choice.
- * "Open Camera" starts Google's document scanner.
+ * Short "opening camera" screen: an animated scanning frame (dotted border, moving scan line) while Google's
+ * document scanner starts. The mode comes from the button pressed on Home, so nothing needs choosing here.
  */
 @Composable
 fun ScanIntroScreen(onOpenCamera: (maxPages: Int) -> Unit, onClose: () -> Unit) {
     val mode = ScanningSessionManager.scanMode.value
-    val selectable = mode == ScanMode.SINGLE_PAGE || mode == ScanMode.BATCH_DOCUMENTS || mode == ScanMode.BURST_SCAN
 
     val title = when (mode) {
         ScanMode.RECEIPT_INVOICE -> "Scan a receipt"
         ScanMode.ID_CARD -> "Scan an ID card"
-        else -> "Scan documents"
+        ScanMode.SINGLE_PAGE -> "Scan a document"
+        ScanMode.BURST_SCAN -> "Burst scan"
+        ScanMode.BATCH_DOCUMENTS -> "Scan documents"
     }
     val hint = when (mode) {
-        ScanMode.SINGLE_PAGE -> "Take one page. Tap the shutter when the outline fits the page."
-        ScanMode.BURST_SCAN -> "In the camera, switch to “Auto capture”. Hold each page steady and it is captured by itself, then show the next page."
+        ScanMode.SINGLE_PAGE -> "One page. Tap the shutter when the outline fits the page."
+        ScanMode.BURST_SCAN -> "In the camera, switch to \u201cAuto capture\u201d. Hold each page steady and it is captured by itself, then show the next page."
         ScanMode.ID_CARD -> "Scan the front, then the back. Both sides are saved in one file."
         ScanMode.RECEIPT_INVOICE -> "Scan the receipt flat and well lit. Totals are read for you."
-        ScanMode.BATCH_DOCUMENTS -> "Scan as many pages as you like, then tap Done. Use “Manual” or “Auto capture” in the camera."
+        ScanMode.BATCH_DOCUMENTS -> "Scan as many pages as you like, then tap Done. Use \u201cManual\u201d or \u201cAuto capture\u201d in the camera."
+    }
+
+    // Open the camera once, after a moment of animation
+    LaunchedEffect(Unit) {
+        delay(1300)
+        onOpenCamera(maxPagesFor(mode))
     }
 
     Column(
@@ -98,49 +107,23 @@ fun ScanIntroScreen(onOpenCamera: (maxPages: Int) -> Unit, onClose: () -> Unit) 
             ScanningFrame(Modifier.fillMaxWidth().aspectRatio(0.72f))
         }
 
-        if (selectable) {
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 24.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(Color.White.copy(alpha = 0.10f))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                listOf(ScanMode.SINGLE_PAGE to "Manual", ScanMode.BATCH_DOCUMENTS to "Multi-Page", ScanMode.BURST_SCAN to "Burst").forEach { (m, label) ->
-                    val selected = mode == m
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (selected) BrandBlue else Color.Transparent)
-                            .clickable { ScanningSessionManager.scanMode.value = m }
-                            .padding(vertical = 11.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(label, color = Color.White, fontSize = 14.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
-            }
-        }
-
+        Text(
+            "Opening camera\u2026",
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
         Text(
             hint,
             color = Color(0xFFB9CBEF),
             fontSize = 13.sp,
             lineHeight = 19.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 14.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 10.dp)
         )
-
-        GradientButton(
-            text = "Open Camera",
-            icon = Icons.Default.CameraAlt,
-            onClick = { onOpenCamera(maxPagesFor(mode)) },
-            modifier = Modifier.padding(horizontal = 24.dp)
-        )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(28.dp))
     }
 }
 

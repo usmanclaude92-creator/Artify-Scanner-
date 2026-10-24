@@ -208,6 +208,9 @@ fun ArtifyScannerApp() {
                     ScanningSessionManager.addPageFromUri(context, page.imageUri, ScanFilter.ORIGINAL)
                 }
             }
+        } else if (navController.currentBackStackEntry?.destination?.route == Screen.ScanIntro.route) {
+            // Camera closed without pages: leave the "opening camera" screen instead of reopening the camera
+            navController.popBackStack()
         }
     }
 
