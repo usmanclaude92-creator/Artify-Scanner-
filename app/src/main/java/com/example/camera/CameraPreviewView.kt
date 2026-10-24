@@ -2,6 +2,20 @@ package com.example.camera
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.core.view.doOnLayout
+import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import android.hardware.camera2.CameraCharacteristics
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.view.ViewGroup
@@ -66,6 +80,11 @@ fun CameraPreviewView(
     var camera: Camera? by remember { mutableStateOf(null) }
     var previewView: PreviewView? by remember { mutableStateOf(null) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
+    var minZoom by remember { mutableFloatStateOf(1f) }
+    var maxZoom by remember { mutableFloatStateOf(5f) }
+    var wideAngle by remember { mutableStateOf(true) }
+    var wideAvailable by remember { mutableStateOf(false) }
+    var rebind: (() -> Unit)? by remember { mutableStateOf(null) }
     val autoCaptureEnabled by rememberUpdatedState(isAutoCapture)
     val autoCaptureCallback by rememberUpdatedState(onAutoCapture)
     val stabilityDetector = remember { StabilityDetector() }
@@ -89,7 +108,7 @@ fun CameraPreviewView(
                 .pointerInput(Unit) {
                     detectTransformGestures { _, _, zoom, _ ->
                         val currentZoom = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
-                        val newZoom = (currentZoom * zoom).coerceIn(1f, 5f)
+                        val newZoom = (currentZoom * zoom).coerceIn(minZoom, maxOf(minZoom, minOf(maxZoom, 8f)))
                         camera?.cameraControl?.setZoomRatio(newZoom)
                         zoomRatio = newZoom
                     }
@@ -134,20 +153,35 @@ fun CameraPreviewView(
                                 }
                             }
                         }
-                    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-                    try {
-                        cameraProvider.unbindAll()
-                        camera = cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            cameraSelector,
-                            preview,
-                            capture,
-                            analysis
-                        )
-                    } catch (e: Exception) {
-                        onError("Camera initialization failed: ${e.message}")
+                    val bind = {
+                        // The viewport makes the captured photo match what the preview shows
+                        val viewPort = view.viewPort
+                        val wideSelector = widestBackCameraSelector(cameraProvider)
+                        val cameraSelector = if (wideAngle) wideSelector.selector else CameraSelector.DEFAULT_BACK_CAMERA
+                        try {
+                            cameraProvider.unbindAll()
+                            val group = UseCaseGroup.Builder()
+                                .addUseCase(preview)
+                                .addUseCase(capture)
+                                .addUseCase(analysis)
+                                .apply { viewPort?.let { setViewPort(it) } }
+                                .build()
+                            val bound = cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, group)
+                            camera = bound
+                            val zoomState = bound.cameraInfo.zoomState.value
+                            minZoom = zoomState?.minZoomRatio ?: 1f
+                            maxZoom = zoomState?.maxZoomRatio ?: 5f
+                            // Logical multi-camera phones expose the ultra-wide lens as zoom < 1x
+                            wideAvailable = wideSelector.isSeparateLens || minZoom < 1f
+                            val target = if (wideAngle) minZoom.coerceAtMost(1f) else 1f
+                            bound.cameraControl.setZoomRatio(target)
+                            zoomRatio = target
+                        } catch (e: Exception) {
+                            onError("Camera initialization failed: ${e.message}")
+                        }
                     }
+                    rebind = bind
+                    if (view.width > 0 && view.height > 0) bind() else view.doOnLayout { bind() }
                 }, ContextCompat.getMainExecutor(ctx))
 
                 view
@@ -156,6 +190,27 @@ fun CameraPreviewView(
 
         // Viewfinder HUD Overlay with animated laser beam
         DocumentScanOverlay(isAutoCapture = isAutoCapture)
+
+        // Wide-angle / standard lens toggle
+        if (wideAvailable) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 210.dp)
+                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                    .clickable {
+                        wideAngle = !wideAngle
+                        rebind?.invoke()
+                    }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = if (wideAngle) "Wide 0.5x" else "Standard 1x",
+                    color = Color(0xFF38BDF8),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 
@@ -194,12 +249,65 @@ fun takePhoto(
     )
 }
 
+private class WideSelector(val selector: CameraSelector, val isSeparateLens: Boolean)
+
+/** Picks the back camera with the shortest 35mm-equivalent focal length (the ultra-wide lens). */
+@androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+private fun widestBackCameraSelector(provider: ProcessCameraProvider): WideSelector {
+    val default = WideSelector(CameraSelector.DEFAULT_BACK_CAMERA, false)
+    return try {
+        val backInfos = provider.availableCameraInfos.filter { it.lensFacing == CameraSelector.LENS_FACING_BACK }
+        if (backInfos.size < 2) return default
+
+        fun equivalentFocal(info: CameraInfo): Float {
+            val c2 = Camera2CameraInfo.from(info)
+            val focal = c2.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                ?.minOrNull() ?: return Float.MAX_VALUE
+            val sensorWidth = c2.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)?.width
+                ?: return focal
+            return focal * 36f / sensorWidth
+        }
+
+        val widest = backInfos.minByOrNull { equivalentFocal(it) } ?: return default
+        val widestId = Camera2CameraInfo.from(widest).cameraId
+        val mainId = Camera2CameraInfo.from(
+            CameraSelector.DEFAULT_BACK_CAMERA.filter(backInfos).firstOrNull() ?: widest
+        ).cameraId
+        if (widestId == mainId) return default
+
+        WideSelector(
+            CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .addCameraFilter { infos ->
+                    infos.filter { Camera2CameraInfo.from(it).cameraId == widestId }.ifEmpty { infos }
+                }
+                .build(),
+            true
+        )
+    } catch (e: Exception) {
+        android.util.Log.w("Artify", "Wide-angle lens lookup failed", e)
+        default
+    }
+}
+
 private fun imageProxyToBitmap(image: ImageProxy, rotationDegrees: Int): Bitmap? {
     val plane = image.planes[0]
     val buffer: ByteBuffer = plane.buffer
     val bytes = ByteArray(buffer.remaining())
     buffer.get(bytes)
-    val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+    var original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+
+    // With a ViewPort the JPEG is full-size; cropRect marks the area the preview showed
+    val crop = image.cropRect
+    if (crop.width() in 1 until original.width || crop.height() in 1 until original.height) {
+        val x = crop.left.coerceIn(0, original.width - 1)
+        val y = crop.top.coerceIn(0, original.height - 1)
+        val w = crop.width().coerceAtMost(original.width - x)
+        val h = crop.height().coerceAtMost(original.height - y)
+        val cropped = Bitmap.createBitmap(original, x, y, w, h)
+        if (cropped != original) original.recycle()
+        original = cropped
+    }
 
     return if (rotationDegrees != 0) {
         val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }

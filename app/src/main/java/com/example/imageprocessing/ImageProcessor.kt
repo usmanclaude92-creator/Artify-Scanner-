@@ -10,6 +10,12 @@ import android.graphics.ColorMatrixColorFilter
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.PointF
+import org.opencv.android.Utils
+import org.opencv.core.Mat
+import org.opencv.core.MatOfPoint
+import org.opencv.core.MatOfPoint2f
+import org.opencv.core.Size
+import org.opencv.imgproc.Imgproc
 import com.example.data.model.NormalizedCornerPoints
 import com.example.data.model.ScanFilter
 import kotlinx.coroutines.Dispatchers
@@ -278,132 +284,107 @@ object ImageProcessor {
         return edgeScore > 4.5f
     }
 
+    /** Crops a bitmap to a region given in normalized (0..1) coordinates. */
+    fun cropNormalized(source: Bitmap, left: Float, top: Float, right: Float, bottom: Float): Bitmap {
+        val x = (left * source.width).toInt().coerceIn(0, source.width - 1)
+        val y = (top * source.height).toInt().coerceIn(0, source.height - 1)
+        val w = ((right - left) * source.width).toInt().coerceIn(1, source.width - x)
+        val h = ((bottom - top) * source.height).toInt().coerceIn(1, source.height - y)
+        return Bitmap.createBitmap(source, x, y, w, h)
+    }
+
+    private val fullFrame = NormalizedCornerPoints(
+        topLeft = PointF(0f, 0f),
+        topRight = PointF(1f, 0f),
+        bottomRight = PointF(1f, 1f),
+        bottomLeft = PointF(0f, 1f)
+    )
+
     /**
-     * Auto-detect document corners heuristic: scans for high contrast transitions
-     * from frame edges towards the center.
+     * Finds the page outline with OpenCV (Canny edges, then the largest convex four-point contour).
+     * Returns the full frame when no confident quadrilateral exists, so nothing is ever cut off by a
+     * wrong guess.
      */
     fun detectDocumentCorners(bitmap: Bitmap): NormalizedCornerPoints {
-        val fallback = NormalizedCornerPoints(
-            topLeft = PointF(0.08f, 0.08f),
-            topRight = PointF(0.92f, 0.08f),
-            bottomRight = PointF(0.92f, 0.92f),
-            bottomLeft = PointF(0.08f, 0.92f)
-        )
-        if (bitmap.width < 16 || bitmap.height < 16) return fallback
+        if (bitmap.width < 32 || bitmap.height < 32 || !OpenCvSupport.ensureLoaded()) return fullFrame
 
-        // 1. Downsample to a small luminance grid (aspect preserved)
-        val maxSide = 160
-        val scale = maxSide.toFloat() / max(bitmap.width, bitmap.height)
-        val w = max(8, (bitmap.width * scale).toInt())
-        val h = max(8, (bitmap.height * scale).toInt())
-        val scaled = Bitmap.createScaledBitmap(bitmap, w, h, true)
-        val pixels = IntArray(w * h)
-        scaled.getPixels(pixels, 0, w, 0, 0, w, h)
-        if (scaled !== bitmap) scaled.recycle()
-        val luma = IntArray(w * h) {
-            val c = pixels[it]
-            (0.299f * ((c shr 16) and 0xFF) + 0.587f * ((c shr 8) and 0xFF) + 0.114f * (c and 0xFF)).toInt()
-        }
+        val scale = min(1f, 800f / max(bitmap.width, bitmap.height))
+        val w = max(32, (bitmap.width * scale).toInt())
+        val h = max(32, (bitmap.height * scale).toInt())
+        val small = if (scale < 1f) Bitmap.createScaledBitmap(bitmap, w, h, true) else bitmap
 
-        // 2. Otsu threshold
-        val hist = IntArray(256)
-        for (v in luma) hist[v]++
-        val total = luma.size
-        var sumAll = 0L
-        for (t in 0..255) sumAll += t.toLong() * hist[t]
-        var sumB = 0L
-        var wB = 0
-        var best = 0.0
-        var threshold = 128
-        for (t in 0..255) {
-            wB += hist[t]
-            if (wB == 0) continue
-            val wF = total - wB
-            if (wF == 0) break
-            sumB += t.toLong() * hist[t]
-            val mB = sumB.toDouble() / wB
-            val mF = (sumAll - sumB).toDouble() / wF
-            val between = wB.toDouble() * wF * (mB - mF) * (mB - mF)
-            if (between > best) {
-                best = between
-                threshold = t
+        val rgba = Mat()
+        val gray = Mat()
+        val edges = Mat()
+        val hierarchy = Mat()
+        val contours = ArrayList<MatOfPoint>()
+        try {
+            Utils.bitmapToMat(small, rgba)
+            Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
+            Imgproc.GaussianBlur(gray, gray, Size(5.0, 5.0), 0.0)
+            Imgproc.Canny(gray, edges, 40.0, 130.0)
+            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(5.0, 5.0))
+            Imgproc.dilate(edges, edges, kernel)
+            kernel.release()
+            Imgproc.findContours(edges, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
+
+            val frameArea = (small.width * small.height).toDouble()
+            var best: Array<org.opencv.core.Point>? = null
+            var bestArea = 0.0
+            for (contour in contours) {
+                val area = Imgproc.contourArea(contour)
+                if (area < frameArea * 0.2 || area > frameArea * 0.985 || area <= bestArea) continue
+                val c2f = MatOfPoint2f(*contour.toArray())
+                val approx = MatOfPoint2f()
+                Imgproc.approxPolyDP(c2f, approx, 0.02 * Imgproc.arcLength(c2f, true), true)
+                val pts = approx.toArray()
+                if (pts.size == 4 && Imgproc.isContourConvex(MatOfPoint(*pts))) {
+                    best = pts
+                    bestArea = area
+                }
+                c2f.release()
+                approx.release()
             }
-        }
+            val quad = best ?: return fullFrame
 
-        // 3. The class that touches the image border least is the document
-        var borderBright = 0
-        var borderCount = 0
-        for (x in 0 until w) {
-            for (y in intArrayOf(0, h - 1)) {
-                borderCount++
-                if (luma[y * w + x] > threshold) borderBright++
-            }
+            // Order corners: TL = min(x+y), BR = max(x+y), TR = max(x-y), BL = min(x-y)
+            val tl = quad.minByOrNull { it.x + it.y }!!
+            val br = quad.maxByOrNull { it.x + it.y }!!
+            val tr = quad.maxByOrNull { it.x - it.y }!!
+            val bl = quad.minByOrNull { it.x - it.y }!!
+            fun norm(p: org.opencv.core.Point) = PointF(
+                (p.x / small.width).toFloat().coerceIn(0f, 1f),
+                (p.y / small.height).toFloat().coerceIn(0f, 1f)
+            )
+            val result = NormalizedCornerPoints(norm(tl), norm(tr), norm(br), norm(bl))
+            return if (isPlausibleQuad(result, bitmap.width, bitmap.height)) result else fullFrame
+        } catch (e: Exception) {
+            android.util.Log.w("Artify", "Edge detection failed", e)
+            return fullFrame
+        } finally {
+            rgba.release()
+            gray.release()
+            edges.release()
+            hierarchy.release()
+            contours.forEach { it.release() }
+            if (small !== bitmap) small.recycle()
         }
-        for (y in 1 until h - 1) {
-            for (x in intArrayOf(0, w - 1)) {
-                borderCount++
-                if (luma[y * w + x] > threshold) borderBright++
-            }
-        }
-        val documentIsBright = borderBright * 2 < borderCount
-        val mask = BooleanArray(w * h) { (luma[it] > threshold) == documentIsBright }
+    }
 
-        // 4. Largest connected component (iterative flood fill)
-        val visited = BooleanArray(w * h)
-        val queue = IntArray(w * h)
-        var bestComponent = IntArray(0)
-        for (start in mask.indices) {
-            if (!mask[start] || visited[start]) continue
-            var head = 0
-            var tail = 0
-            queue[tail++] = start
-            visited[start] = true
-            while (head < tail) {
-                val idx = queue[head++]
-                val x = idx % w
-                val y = idx / w
-                if (x > 0 && mask[idx - 1] && !visited[idx - 1]) { visited[idx - 1] = true; queue[tail++] = idx - 1 }
-                if (x < w - 1 && mask[idx + 1] && !visited[idx + 1]) { visited[idx + 1] = true; queue[tail++] = idx + 1 }
-                if (y > 0 && mask[idx - w] && !visited[idx - w]) { visited[idx - w] = true; queue[tail++] = idx - w }
-                if (y < h - 1 && mask[idx + w] && !visited[idx + w]) { visited[idx + w] = true; queue[tail++] = idx + w }
-            }
-            if (tail > bestComponent.size) bestComponent = queue.copyOf(tail)
+    /** Rejects quads with tiny sides or extreme aspect ratios. */
+    private fun isPlausibleQuad(q: NormalizedCornerPoints, width: Int, height: Int): Boolean {
+        fun dist(a: PointF, b: PointF): Float {
+            val dx = (a.x - b.x) * width
+            val dy = (a.y - b.y) * height
+            return sqrt(dx * dx + dy * dy)
         }
-        if (bestComponent.size < total * 0.15f) return fallback
-
-        // 5. Corners = extreme points along the diagonals
-        var tl = -1; var tr = -1; var br = -1; var bl = -1
-        var tlV = Int.MAX_VALUE; var trV = Int.MIN_VALUE; var brV = Int.MIN_VALUE; var blV = Int.MAX_VALUE
-        for (idx in bestComponent) {
-            val x = idx % w
-            val y = idx / w
-            val sum = x + y
-            val diff = x - y
-            if (sum < tlV) { tlV = sum; tl = idx }
-            if (sum > brV) { brV = sum; br = idx }
-            if (diff > trV) { trV = diff; tr = idx }
-            if (diff < blV) { blV = diff; bl = idx }
-        }
-        fun pt(idx: Int) = PointF(((idx % w) + 0.5f) / w, ((idx / w) + 0.5f) / h)
-        val result = NormalizedCornerPoints(pt(tl), pt(tr), pt(br), pt(bl))
-
-        // 6. Reject implausible quads: tiny sides, extreme aspect ratio, or too little area
-        fun dist(a: PointF, b: PointF) = sqrt(((a.x - b.x) * bitmap.width).let { it * it } + ((a.y - b.y) * bitmap.height).let { it * it })
-        val top = dist(result.topLeft, result.topRight)
-        val bottom = dist(result.bottomLeft, result.bottomRight)
-        val left = dist(result.topLeft, result.bottomLeft)
-        val right = dist(result.topRight, result.bottomRight)
+        val top = dist(q.topLeft, q.topRight)
+        val bottom = dist(q.bottomLeft, q.bottomRight)
+        val left = dist(q.topLeft, q.bottomLeft)
+        val right = dist(q.topRight, q.bottomRight)
         val minSide = min(min(top, bottom), min(left, right))
         val aspect = (top + bottom) / (left + right)
-        if (minSide < 0.2f * min(bitmap.width, bitmap.height) || aspect < 0.3f || aspect > 3.5f) return fallback
-        val q = listOf(result.topLeft, result.topRight, result.bottomRight, result.bottomLeft)
-        var area = 0f
-        for (i in q.indices) {
-            val a = q[i]
-            val b = q[(i + 1) % q.size]
-            area += a.x * b.y - b.x * a.y
-        }
-        return if (kotlin.math.abs(area) / 2f < 0.15f) fallback else result
+        return minSide >= 0.2f * min(width, height) && aspect in 0.3f..3.5f
     }
 
     /**

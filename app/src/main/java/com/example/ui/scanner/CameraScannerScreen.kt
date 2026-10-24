@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.widget.Toast
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import com.example.imageprocessing.ImageProcessor
 import androidx.activity.result.IntentSenderRequest
 import com.example.data.model.ScanFilter
 import androidx.compose.material.icons.filled.DocumentScanner
@@ -168,8 +171,16 @@ fun CameraScannerScreen(
         takePhoto(
             context = context,
             imageCapture = activeImageCapture,
-            onSuccess = { bitmap ->
-                scope.launch { ScanningSessionManager.addPageFromBitmap(context, bitmap) }
+            onSuccess = { photo ->
+                scope.launch {
+                    // Keep only what was inside the on-screen guide frame (see DocumentScanOverlay)
+                    val guided = withContext(Dispatchers.Default) {
+                        ImageProcessor.cropNormalized(photo, 0.08f, 0.12f, 0.92f, 0.88f).also {
+                            if (it !== photo) photo.recycle()
+                        }
+                    }
+                    ScanningSessionManager.addPageFromBitmap(context, guided)
+                }
             },
             onError = { err -> Toast.makeText(context, err, Toast.LENGTH_SHORT).show() }
         )

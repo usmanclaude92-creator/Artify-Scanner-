@@ -19,6 +19,9 @@ android {
     versionCode = 1
     versionName = "1.0"
 
+    // OpenCV ships native libs for every ABI; keep phone architectures only
+    ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -110,6 +113,7 @@ dependencies {
   implementation(libs.coil.compose)
   implementation(libs.mlkit.text.recognition)
   implementation(libs.mlkit.document.scanner)
+  implementation(libs.opencv)
   implementation(libs.firebase.ai)
   // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)

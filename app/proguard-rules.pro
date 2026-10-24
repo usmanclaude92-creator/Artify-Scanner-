@@ -23,3 +23,6 @@
 # Keep readable stack traces for crash reports
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# OpenCV is accessed through JNI
+-keep class org.opencv.** { *; }
