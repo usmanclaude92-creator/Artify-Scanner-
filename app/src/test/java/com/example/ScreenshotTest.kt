@@ -92,11 +92,11 @@ class ScreenshotTest {
     @Test fun splash() = shot("splash", true) { SplashScreen(showActions = true) }
 
     @Test fun authSignUp() = shot("auth_signup", false) {
-        AuthScreen(true, false, { _, _, _ -> null }, { _, _ -> null }, { null }, { null }, {}, {})
+        AuthScreen(true, false, { _, _, _ -> null }, { _, _ -> null }, { null }, { null }, { null }, {}, {})
     }
 
     @Test fun authLoginDark() = shot("auth_login_dark", true) {
-        AuthScreen(false, true, { _, _, _ -> null }, { _, _ -> null }, { null }, { null }, {}, {})
+        AuthScreen(false, true, { _, _, _ -> null }, { _, _ -> null }, { null }, { null }, { null }, {}, {})
     }
 
 

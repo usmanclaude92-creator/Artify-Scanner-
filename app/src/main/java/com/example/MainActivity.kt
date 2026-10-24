@@ -165,6 +165,7 @@ private fun AppRoot(activity: FragmentActivity, startAtSplash: Boolean) {
                 onEmailSignUp = { name, email, pass -> AuthManager.signUpWithEmail(context, name, email, pass).exceptionOrNull()?.message },
                 onEmailLogin = { email, pass -> AuthManager.signInWithEmail(context, email, pass).exceptionOrNull()?.message },
                 onGoogle = { AuthManager.signInWithGoogle(activity).exceptionOrNull()?.message },
+                onProvider = { id -> AuthManager.signInWithProvider(activity, id).exceptionOrNull()?.message },
                 onForgotPassword = { email -> AuthManager.sendPasswordReset(context, email).exceptionOrNull()?.message },
                 onGuest = { AuthManager.continueAsGuest(context) },
                 onBack = { stage = Stage.SPLASH }

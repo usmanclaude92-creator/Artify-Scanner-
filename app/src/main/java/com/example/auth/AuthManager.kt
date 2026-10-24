@@ -165,6 +165,18 @@ object AuthManager {
         return auth.signInWithCredential(GoogleAuthProvider.getCredential(google.idToken, null)).awaitResult().user
     }
 
+    /** Facebook, Microsoft, Yahoo...: Firebase's browser sign-in for any provider enabled in the console. */
+    suspend fun signInWithProvider(activity: Activity, providerId: String): Result<Unit> = runCatching {
+        check(isConfigured(activity)) { NOT_CONFIGURED }
+        val auth = FirebaseAuth.getInstance()
+        val provider = OAuthProvider.newBuilder(providerId).build()
+        val result = (auth.pendingAuthResult ?: auth.startActivityForSignInWithProvider(activity, provider)).awaitResult()
+        val signedIn = result.user ?: error("Sign-in failed")
+        prefs(activity).edit().putBoolean("guest", false).apply()
+        profile.value = fromFirebase(activity.applicationContext, signedIn)
+        welcomeOnce(activity.applicationContext)
+    }.mapError()
+
     suspend fun sendPasswordReset(context: Context, email: String): Result<Unit> = runCatching {
         check(isConfigured(context)) { NOT_CONFIGURED }
         require(email.isNotBlank()) { "Enter your email first" }
@@ -248,6 +260,7 @@ object AuthManager {
         "ERROR_EMAIL_ALREADY_IN_USE" -> "An account with this email already exists. Try logging in."
         "ERROR_WEAK_PASSWORD" -> "Choose a stronger password (at least 6 characters)."
         "ERROR_NETWORK_REQUEST_FAILED" -> "No internet connection."
+        "ERROR_WEB_CONTEXT_CANCELED" -> "Sign-in was cancelled."
         "ERROR_OPERATION_NOT_ALLOWED" -> "This sign-in method is not enabled in Firebase yet (Authentication > Sign-in method)."
         else -> if (e.message?.contains("CONFIGURATION_NOT_FOUND") == true)
             "Firebase Authentication is not set up for this project yet. In the Firebase console open Build > Authentication and tap Get started, then enable Email/Password and Google."

@@ -56,6 +56,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.example.ui.components.BrandGradient
 import kotlinx.coroutines.launch
 
@@ -69,6 +71,7 @@ fun AuthScreen(
     onEmailSignUp: suspend (name: String, email: String, password: String) -> String?,
     onEmailLogin: suspend (email: String, password: String) -> String?,
     onGoogle: suspend () -> String?,
+    onProvider: suspend (providerId: String) -> String?,
     onForgotPassword: suspend (email: String) -> String?,
     onGuest: () -> Unit,
     onBack: () -> Unit
@@ -148,39 +151,6 @@ fun AuthScreen(
                         .padding(14.dp)
                 )
                 Spacer(Modifier.height(16.dp))
-            }
-
-            // Google
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-                    .clickable(enabled = configured && !busy) { run { onGoogle() } },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Box(
-                    modifier = Modifier.size(26.dp).clip(CircleShape).background(Color.White)
-                        .border(1.dp, Color(0xFFE0E4EC), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    "Continue with Google",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (configured) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f).height(1.dp).background(MaterialTheme.colorScheme.outline))
-                Text("  or with email  ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Box(Modifier.weight(1f).height(1.dp).background(MaterialTheme.colorScheme.outline))
             }
 
             if (signUp) {
@@ -286,6 +256,41 @@ fun AuthScreen(
                 )
             }
 
+            Row(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f).height(1.dp).background(MaterialTheme.colorScheme.outline))
+                Text(
+                    if (signUp) "  or sign up with  " else "  or log in with  ",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Box(Modifier.weight(1f).height(1.dp).background(MaterialTheme.colorScheme.outline))
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) {
+                SocialIconButton("Google", configured && !busy, { run { onGoogle() } }) {
+                    Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                }
+                SocialIconButton("Facebook", configured && !busy, { run { onProvider("facebook.com") } }) {
+                    Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0xFF1877F2)), contentAlignment = Alignment.Center) {
+                        Text("f", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    }
+                }
+                SocialIconButton("Microsoft", configured && !busy, { run { onProvider("microsoft.com") } }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Box(Modifier.size(13.dp).background(Color(0xFFF25022)))
+                            Box(Modifier.size(13.dp).background(Color(0xFF7FBA00)))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Box(Modifier.size(13.dp).background(Color(0xFF00A4EF)))
+                            Box(Modifier.size(13.dp).background(Color(0xFFFFB900)))
+                        }
+                    }
+                }
+                SocialIconButton("Yahoo", configured && !busy, { run { onProvider("yahoo.com") } }) {
+                    Text("Y!", color = Color(0xFF7B1FE8), fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                }
+            }
+
             Text(
                 "Continue as guest",
                 style = MaterialTheme.typography.labelLarge,
@@ -300,4 +305,20 @@ fun AuthScreen(
             )
         }
     }
+}
+
+
+/** Round white button with a social brand mark, for the "sign up / log in with" row. */
+@Composable
+private fun SocialIconButton(label: String, enabled: Boolean, onClick: () -> Unit, mark: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(60.dp)
+            .clip(CircleShape)
+            .background(Color.White)
+            .border(1.dp, Color(0xFFE0E4EC), CircleShape)
+            .semantics { contentDescription = label }
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) { mark() }
 }
