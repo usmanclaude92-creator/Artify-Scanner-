@@ -195,7 +195,7 @@ object PdfEngine {
                 false
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("Artify", "Operation failed", e)
             tempFile.delete()
             false
         } finally {

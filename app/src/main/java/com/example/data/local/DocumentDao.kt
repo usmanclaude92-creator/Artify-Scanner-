@@ -52,6 +52,6 @@ interface DocumentDao {
     @Query("DELETE FROM document_pages WHERE documentId = :documentId")
     suspend fun deletePagesForDocument(documentId: String)
 
-    @Query("SELECT * FROM documents WHERE title LIKE '%' || :query || '%' OR ocrFullText LIKE '%' || :query || '%' ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM documents WHERE title LIKE '%' || :query || '%' ESCAPE '\\' OR ocrFullText LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY updatedAt DESC")
     fun searchDocuments(query: String): Flow<List<DocumentEntity>>
 }

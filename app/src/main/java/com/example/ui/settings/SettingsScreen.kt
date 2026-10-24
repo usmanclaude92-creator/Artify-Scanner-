@@ -46,6 +46,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.fragment.app.FragmentActivity
+import com.example.security.AppLock
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,7 +60,7 @@ fun SettingsScreen() {
     val context = LocalContext.current
 
     var autoCaptureEnabled by remember { ScanningSessionManager.isAutoCapture }
-    var appLockEnabled by remember { mutableStateOf(false) }
+    var appLockEnabled by remember { mutableStateOf(AppLock.isEnabled(context)) }
 
     fun calculateCacheSize(): String {
         val cache = context.cacheDir
@@ -234,9 +236,26 @@ fun SettingsScreen() {
                             }
                             Switch(
                                 checked = appLockEnabled,
-                                onCheckedChange = {
-                                    appLockEnabled = it
-                                    Toast.makeText(context, if (it) "App lock enabled" else "App lock disabled", Toast.LENGTH_SHORT).show()
+                                onCheckedChange = { wantEnabled ->
+                                    val activity = context as? FragmentActivity
+                                    if (activity == null || !AppLock.isAvailable(context)) {
+                                        Toast.makeText(
+                                            context,
+                                            "Set up a fingerprint, face or screen lock in system settings first",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    } else {
+                                        // Confirm identity before changing the lock setting
+                                        AppLock.authenticate(
+                                            activity = activity,
+                                            title = if (wantEnabled) "Enable App Lock" else "Disable App Lock",
+                                            onSuccess = {
+                                                AppLock.setEnabled(context, wantEnabled)
+                                                appLockEnabled = wantEnabled
+                                                Toast.makeText(context, if (wantEnabled) "App lock enabled" else "App lock disabled", Toast.LENGTH_SHORT).show()
+                                            }
+                                        )
+                                    }
                                 }
                             )
                         }
@@ -249,7 +268,7 @@ fun SettingsScreen() {
                             Icon(Icons.Default.Security, null, tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Local-First Architecture: Documents and OCR processing remain strictly on your device. Zero unconsented cloud uploads.",
+                                text = "Local-First Architecture: Documents and OCR processing remain strictly on your device. Nothing is uploaded unless you ask the AI Assistant, which sends that document's text to Google Gemini.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

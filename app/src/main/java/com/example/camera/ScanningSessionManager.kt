@@ -12,6 +12,7 @@ import com.example.imageprocessing.ImageProcessor
 import com.example.ocr.OcrEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -53,49 +54,59 @@ object ScanningSessionManager {
         val originalFile = File(tempDir, "orig_${pageId}.jpg")
         val processedFile = File(tempDir, "proc_${pageId}.jpg")
 
-        // 1. Save original capture
-        ImageProcessor.saveBitmapToFile(rawBitmap, originalFile, quality = 95)
+        var correctedBitmap: Bitmap? = null
+        var filteredBitmap: Bitmap? = null
+        try {
+            // 1. Save original capture
+            ImageProcessor.saveBitmapToFile(rawBitmap, originalFile, quality = 95)
 
-        // 2. Detect corners and apply perspective & filter
-        val corners = ImageProcessor.detectDocumentCorners(rawBitmap)
-        val correctedBitmap = ImageProcessor.applyPerspectiveCorrection(rawBitmap, corners)
-        val filteredBitmap = ImageProcessor.applyFilter(correctedBitmap, filter)
+            // 2. Detect corners and apply perspective & filter
+            val corners = ImageProcessor.detectDocumentCorners(rawBitmap)
+            correctedBitmap = ImageProcessor.applyPerspectiveCorrection(rawBitmap, corners)
+            filteredBitmap = ImageProcessor.applyFilter(correctedBitmap, filter)
 
-        // 3. Save processed image
-        ImageProcessor.saveBitmapToFile(filteredBitmap, processedFile, quality = 90)
+            // 3. Save processed image
+            ImageProcessor.saveBitmapToFile(filteredBitmap, processedFile, quality = 90)
 
-        // 4. Run on-device OCR in background
-        statusMessage.value = "Recognizing text..."
-        val recognizedText = OcrEngine.recognizeText(filteredBitmap)
+            // 4. Run on-device OCR in background
+            statusMessage.value = "Recognizing text..."
+            val recognizedText = OcrEngine.recognizeText(filteredBitmap)
 
-        val newPage = CapturedPage(
-            id = pageId,
-            localImagePath = processedFile.absolutePath,
-            originalImagePath = originalFile.absolutePath,
-            pageIndex = capturedPages.size,
-            filter = filter,
-            cropPoints = corners,
-            ocrText = recognizedText,
-            isProcessed = true
-        )
+            val newPage = CapturedPage(
+                id = pageId,
+                localImagePath = processedFile.absolutePath,
+                originalImagePath = originalFile.absolutePath,
+                pageIndex = capturedPages.size,
+                filter = filter,
+                cropPoints = corners,
+                ocrText = recognizedText,
+                isProcessed = true
+            )
 
-        withContext(Dispatchers.Main) {
-            if (scanMode.value == ScanMode.ID_CARD) {
-                if (idCardFrontPage.value == null) {
-                    idCardFrontPage.value = newPage
-                    capturedPages.add(newPage)
-                } else if (idCardBackPage.value == null) {
-                    idCardBackPage.value = newPage
+            withContext(Dispatchers.Main) {
+                if (scanMode.value == ScanMode.ID_CARD) {
+                    if (idCardFrontPage.value == null) {
+                        idCardFrontPage.value = newPage
+                        capturedPages.add(newPage)
+                    } else if (idCardBackPage.value == null) {
+                        idCardBackPage.value = newPage
+                        capturedPages.add(newPage)
+                    }
+                } else {
                     capturedPages.add(newPage)
                 }
-            } else {
-                capturedPages.add(newPage)
             }
-            isProcessingCapture.value = false
-            statusMessage.value = null
+            newPage
+        } finally {
+            // Free native bitmap memory; the page lives on disk from here on
+            if (filteredBitmap != null && filteredBitmap !== correctedBitmap) filteredBitmap.recycle()
+            if (correctedBitmap != null && correctedBitmap !== rawBitmap) correctedBitmap.recycle()
+            if (!rawBitmap.isRecycled) rawBitmap.recycle()
+            withContext(NonCancellable + Dispatchers.Main) {
+                isProcessingCapture.value = false
+                statusMessage.value = null
+            }
         }
-
-        newPage
     }
 
     suspend fun addPageFromUri(
@@ -103,29 +114,26 @@ object ScanningSessionManager {
         uri: Uri,
         filter: ScanFilter = ScanFilter.MAGIC_COLOR
     ): CapturedPage? = withContext(Dispatchers.IO) {
+        // Copy to a temp file first so large photos can be decoded down-sampled
+        val temp = File(context.cacheDir, "import_${UUID.randomUUID()}.tmp")
         try {
             isProcessingCapture.value = true
             statusMessage.value = "Importing image..."
-            var inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-            val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-            inputStream?.close()
-
-            if (bitmap != null) {
-                addPageFromBitmap(context, bitmap, filter)
-            } else {
-                withContext(Dispatchers.Main) {
-                    isProcessingCapture.value = false
-                    statusMessage.value = null
-                }
-                null
-            }
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                temp.outputStream().use { input.copyTo(it) }
+            } ?: return@withContext null
+            val bitmap = ImageProcessor.decodeSampledBitmap(temp, reqWidth = 3000, reqHeight = 4000)
+                ?: return@withContext null
+            addPageFromBitmap(context, bitmap, filter)
         } catch (e: Exception) {
-            e.printStackTrace()
-            withContext(Dispatchers.Main) {
+            android.util.Log.e("ScanningSession", "Image import failed", e)
+            null
+        } finally {
+            temp.delete()
+            withContext(NonCancellable + Dispatchers.Main) {
                 isProcessingCapture.value = false
                 statusMessage.value = null
             }
-            null
         }
     }
 

@@ -12,6 +12,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -112,6 +114,35 @@ fun PdfToolsScreen(
     var showCompressDialog by remember { mutableStateOf(false) }
     var showSignatureDialog by remember { mutableStateOf(false) }
     var showWatermarkDialog by remember { mutableStateOf(false) }
+    var pickerAction by remember { mutableStateOf<String?>(null) }
+
+    fun runOnDocument(action: String, doc: com.example.data.model.ScannedDocumentItem) {
+        isProcessing = true
+        val compress = action == "compress"
+        processingMsg = if (compress) "Compressing ${doc.title}..." else "Applying watermark..."
+        scope.launch {
+            val pages = repository.getPagesForDocument(doc.id)
+            val config = PdfExportConfig(
+                filename = "${doc.title}_${if (compress) "Compressed" else "Watermarked"}",
+                pageSize = PdfPageSize.A4,
+                quality = if (compress) PdfQuality.COMPRESSED else PdfQuality.HIGH,
+                watermarkText = if (compress) "" else "CONFIDENTIAL"
+            )
+            val result = repository.saveScanSessionOrNull(
+                title = config.filename,
+                category = doc.category,
+                pages = pages,
+                pdfConfig = config
+            )
+            isProcessing = false
+            if (result != null) {
+                Toast.makeText(context, if (compress) "Compressed PDF created!" else "Watermarked PDF created!", Toast.LENGTH_SHORT).show()
+                onOpenDocument(result.id)
+            } else {
+                Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     // Images to PDF Picker
     val imagesToPdfLauncher = rememberLauncherForActivityResult(
@@ -154,6 +185,34 @@ fun PdfToolsScreen(
 
     if (isProcessing) {
         ProcessingDialog(message = processingMsg)
+    }
+
+    // DOCUMENT PICKER for single-document tools (compress / watermark)
+    pickerAction?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pickerAction = null },
+            title = { Text(if (action == "compress") "Compress which document?" else "Watermark which document?") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    allDocs.forEach { doc ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    pickerAction = null
+                                    runOnDocument(action, doc)
+                                }
+                                .padding(vertical = 8.dp)
+                        ) {
+                            Text(doc.title, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                            Text("${doc.pageCount} pages", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { pickerAction = null }) { Text("Cancel") } }
+        )
     }
 
     // MERGE PDFs DIALOG
@@ -327,36 +386,7 @@ fun PdfToolsScreen(
                     description = "Reduce file size with smart JPEG downsampling while preserving clear, readable text.",
                     icon = Icons.Default.Straighten,
                     iconTint = androidx.compose.ui.graphics.Color(0xFFF59E0B),
-                    onClick = {
-                        val first = allDocs.firstOrNull()
-                        if (first != null) {
-                            isProcessing = true
-                            processingMsg = "Compressing ${first.title}..."
-                            scope.launch {
-                                val pages = repository.getPagesForDocument(first.id)
-                                val config = PdfExportConfig(
-                                    filename = "${first.title}_Compressed",
-                                    pageSize = PdfPageSize.A4,
-                                    quality = PdfQuality.COMPRESSED
-                                )
-                                val compDoc = repository.saveScanSessionOrNull(
-                                    title = config.filename,
-                                    category = first.category,
-                                    pages = pages,
-                                    pdfConfig = config
-                                )
-                                isProcessing = false
-                                if (compDoc != null) {
-                                    Toast.makeText(context, "Compressed PDF created!", Toast.LENGTH_SHORT).show()
-                                    onOpenDocument(compDoc.id)
-                                } else {
-                                    Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        } else {
-                            Toast.makeText(context, "No documents available to compress", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                    onClick = { if (allDocs.isEmpty()) Toast.makeText(context, "No documents available to compress", Toast.LENGTH_SHORT).show() else pickerAction = "compress" }
                 )
             }
 
@@ -366,37 +396,7 @@ fun PdfToolsScreen(
                     description = "Add 'CONFIDENTIAL', 'ORIGINAL', or custom watermarks across all document pages.",
                     icon = Icons.Default.BrandingWatermark,
                     iconTint = androidx.compose.ui.graphics.Color(0xFFEC4899),
-                    onClick = {
-                        val first = allDocs.firstOrNull()
-                        if (first != null) {
-                            isProcessing = true
-                            processingMsg = "Applying watermark..."
-                            scope.launch {
-                                val pages = repository.getPagesForDocument(first.id)
-                                val config = PdfExportConfig(
-                                    filename = "${first.title}_Watermarked",
-                                    pageSize = PdfPageSize.A4,
-                                    quality = PdfQuality.HIGH,
-                                    watermarkText = "CONFIDENTIAL"
-                                )
-                                val wmDoc = repository.saveScanSessionOrNull(
-                                    title = config.filename,
-                                    category = first.category,
-                                    pages = pages,
-                                    pdfConfig = config
-                                )
-                                isProcessing = false
-                                if (wmDoc != null) {
-                                    Toast.makeText(context, "Watermarked PDF created!", Toast.LENGTH_SHORT).show()
-                                    onOpenDocument(wmDoc.id)
-                                } else {
-                                    Toast.makeText(context, "Could not create PDF. Please try again.", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        } else {
-                            Toast.makeText(context, "No documents available to watermark", Toast.LENGTH_SHORT).show()
-                        }
-                    }
+                    onClick = { if (allDocs.isEmpty()) Toast.makeText(context, "No documents available to watermark", Toast.LENGTH_SHORT).show() else pickerAction = "watermark" }
                 )
             }
         }

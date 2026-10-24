@@ -1,7 +1,9 @@
 package com.example
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
+import com.example.security.AppLock
+import com.example.ui.security.LockScreen
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -66,13 +68,28 @@ data class BottomNavItem(
     val testTag: String
 )
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
+    override fun onStart() {
+        super.onStart()
+        AppLock.onAppForegrounded(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        AppLock.onAppBackgrounded()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) AppLock.lockIfEnabledOnLaunch(this)
         enableEdgeToEdge()
         setContent {
             ArtifyScannerTheme {
-                ArtifyScannerApp()
+                if (AppLock.locked.value) {
+                    LockScreen(activity = this)
+                } else {
+                    ArtifyScannerApp()
+                }
             }
         }
     }
@@ -86,6 +103,7 @@ fun ArtifyScannerApp() {
 
     // Seed realistic guide & sample documents on first startup
     LaunchedEffect(Unit) {
+        repository.migrateCachedPageImages()
         repository.seedSampleDocumentsIfEmpty()
     }
 

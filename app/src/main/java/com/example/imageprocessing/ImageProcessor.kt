@@ -283,24 +283,119 @@ object ImageProcessor {
      * from frame edges towards the center.
      */
     fun detectDocumentCorners(bitmap: Bitmap): NormalizedCornerPoints {
-        val w = min(bitmap.width, 320)
-        val h = min(bitmap.height, 420)
-        val scaled = Bitmap.createScaledBitmap(bitmap, w, h, false)
+        val fallback = NormalizedCornerPoints(
+            topLeft = PointF(0.08f, 0.08f),
+            topRight = PointF(0.92f, 0.08f),
+            bottomRight = PointF(0.92f, 0.92f),
+            bottomLeft = PointF(0.08f, 0.92f)
+        )
+        if (bitmap.width < 16 || bitmap.height < 16) return fallback
+
+        // 1. Downsample to a small luminance grid (aspect preserved)
+        val maxSide = 160
+        val scale = maxSide.toFloat() / max(bitmap.width, bitmap.height)
+        val w = max(8, (bitmap.width * scale).toInt())
+        val h = max(8, (bitmap.height * scale).toInt())
+        val scaled = Bitmap.createScaledBitmap(bitmap, w, h, true)
         val pixels = IntArray(w * h)
         scaled.getPixels(pixels, 0, w, 0, 0, w, h)
+        if (scaled !== bitmap) scaled.recycle()
+        val luma = IntArray(w * h) {
+            val c = pixels[it]
+            (0.299f * ((c shr 16) and 0xFF) + 0.587f * ((c shr 8) and 0xFF) + 0.114f * (c and 0xFF)).toInt()
+        }
 
-        var minX = w * 0.08f
-        var maxX = w * 0.92f
-        var minY = h * 0.08f
-        var maxY = h * 0.92f
+        // 2. Otsu threshold
+        val hist = IntArray(256)
+        for (v in luma) hist[v]++
+        val total = luma.size
+        var sumAll = 0L
+        for (t in 0..255) sumAll += t.toLong() * hist[t]
+        var sumB = 0L
+        var wB = 0
+        var best = 0.0
+        var threshold = 128
+        for (t in 0..255) {
+            wB += hist[t]
+            if (wB == 0) continue
+            val wF = total - wB
+            if (wF == 0) break
+            sumB += t.toLong() * hist[t]
+            val mB = sumB.toDouble() / wB
+            val mF = (sumAll - sumB).toDouble() / wF
+            val between = wB.toDouble() * wF * (mB - mF) * (mB - mF)
+            if (between > best) {
+                best = between
+                threshold = t
+            }
+        }
 
-        // Safe bounds
-        return NormalizedCornerPoints(
-            topLeft = PointF(minX / w, minY / h),
-            topRight = PointF(maxX / w, minY / h),
-            bottomRight = PointF(maxX / w, maxY / h),
-            bottomLeft = PointF(minX / w, maxY / h)
-        )
+        // 3. The class that touches the image border least is the document
+        var borderBright = 0
+        var borderCount = 0
+        for (x in 0 until w) {
+            for (y in intArrayOf(0, h - 1)) {
+                borderCount++
+                if (luma[y * w + x] > threshold) borderBright++
+            }
+        }
+        for (y in 1 until h - 1) {
+            for (x in intArrayOf(0, w - 1)) {
+                borderCount++
+                if (luma[y * w + x] > threshold) borderBright++
+            }
+        }
+        val documentIsBright = borderBright * 2 < borderCount
+        val mask = BooleanArray(w * h) { (luma[it] > threshold) == documentIsBright }
+
+        // 4. Largest connected component (iterative flood fill)
+        val visited = BooleanArray(w * h)
+        val queue = IntArray(w * h)
+        var bestComponent = IntArray(0)
+        for (start in mask.indices) {
+            if (!mask[start] || visited[start]) continue
+            var head = 0
+            var tail = 0
+            queue[tail++] = start
+            visited[start] = true
+            while (head < tail) {
+                val idx = queue[head++]
+                val x = idx % w
+                val y = idx / w
+                if (x > 0 && mask[idx - 1] && !visited[idx - 1]) { visited[idx - 1] = true; queue[tail++] = idx - 1 }
+                if (x < w - 1 && mask[idx + 1] && !visited[idx + 1]) { visited[idx + 1] = true; queue[tail++] = idx + 1 }
+                if (y > 0 && mask[idx - w] && !visited[idx - w]) { visited[idx - w] = true; queue[tail++] = idx - w }
+                if (y < h - 1 && mask[idx + w] && !visited[idx + w]) { visited[idx + w] = true; queue[tail++] = idx + w }
+            }
+            if (tail > bestComponent.size) bestComponent = queue.copyOf(tail)
+        }
+        if (bestComponent.size < total * 0.15f) return fallback
+
+        // 5. Corners = extreme points along the diagonals
+        var tl = -1; var tr = -1; var br = -1; var bl = -1
+        var tlV = Int.MAX_VALUE; var trV = Int.MIN_VALUE; var brV = Int.MIN_VALUE; var blV = Int.MAX_VALUE
+        for (idx in bestComponent) {
+            val x = idx % w
+            val y = idx / w
+            val sum = x + y
+            val diff = x - y
+            if (sum < tlV) { tlV = sum; tl = idx }
+            if (sum > brV) { brV = sum; br = idx }
+            if (diff > trV) { trV = diff; tr = idx }
+            if (diff < blV) { blV = diff; bl = idx }
+        }
+        fun pt(idx: Int) = PointF(((idx % w) + 0.5f) / w, ((idx / w) + 0.5f) / h)
+        val result = NormalizedCornerPoints(pt(tl), pt(tr), pt(br), pt(bl))
+
+        // 6. Reject degenerate quads (shoelace area)
+        val q = listOf(result.topLeft, result.topRight, result.bottomRight, result.bottomLeft)
+        var area = 0f
+        for (i in q.indices) {
+            val a = q[i]
+            val b = q[(i + 1) % q.size]
+            area += a.x * b.y - b.x * a.y
+        }
+        return if (kotlin.math.abs(area) / 2f < 0.15f) fallback else result
     }
 
     /**
@@ -319,7 +414,7 @@ object ImageProcessor {
             }
             true
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("Artify", "Operation failed", e)
             false
         }
     }

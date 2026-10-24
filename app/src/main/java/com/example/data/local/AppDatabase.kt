@@ -23,7 +23,7 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "artify_scanner.db"
-                ).fallbackToDestructiveMigration().build()
+                ).build() // add explicit Migrations on schema changes; never wipe user documents
                 INSTANCE = instance
                 instance
             }

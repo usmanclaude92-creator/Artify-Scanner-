@@ -23,11 +23,11 @@ object OcrEngine {
                     continuation.resume(visionText.text)
                 }
                 .addOnFailureListener { error ->
-                    error.printStackTrace()
+                    android.util.Log.e("Artify", "Operation failed", error)
                     continuation.resume("")
                 }
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.e("Artify", "Operation failed", e)
             continuation.resume("")
         }
     }
@@ -42,11 +42,13 @@ object OcrEngine {
 
         // 1. Merchant name: usually first bold/prominent line that isn't a date or generic word
         var merchant = "Unknown Merchant"
+        val dateLike = Regex("\\b\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}\\b")
         for (line in lines.take(4)) {
             val lower = line.lowercase()
             if (!lower.contains("receipt") && !lower.contains("invoice") &&
                 !lower.contains("tax") && !lower.contains("welcome") &&
-                !line.matches(Regex(".*\\d{2,}.*")) && line.length in 3..40
+                line.count { it.isLetter() } >= 3 && !dateLike.containsMatchIn(line) &&
+                line.length in 3..40
             ) {
                 merchant = line
                 break
@@ -96,36 +98,36 @@ object OcrEngine {
         var subtotal = ""
         var tax = ""
 
-        val totalPattern = Pattern.compile("(total|grand total|amount due|balance due)\\s*[:$€£]?\\s*([0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
-        val subtotalPattern = Pattern.compile("(subtotal|sub-total|sub total|net)\\s*[:$€£]?\\s*([0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
-        val taxPattern = Pattern.compile("(tax|vat|gst|sales tax)\\s*[:$€£]?\\s*([0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
+        val totalPattern = Pattern.compile("(total|grand total|amount due|balance due)\\s*[:$€£]?\\s*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
+        val subtotalPattern = Pattern.compile("(subtotal|sub-total|sub total|net)\\s*[:$€£]?\\s*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
+        val taxPattern = Pattern.compile("(tax|vat|gst|sales tax)\\s*[:$€£]?\\s*([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})", Pattern.CASE_INSENSITIVE)
 
         for (line in lines) {
             if (total.isBlank()) {
                 val m = totalPattern.matcher(line)
-                if (m.find()) total = m.group(2) ?: ""
+                if (m.find()) total = normalizeAmount(m.group(2) ?: "")
             }
             if (subtotal.isBlank()) {
                 val m = subtotalPattern.matcher(line)
-                if (m.find()) subtotal = m.group(2) ?: ""
+                if (m.find()) subtotal = normalizeAmount(m.group(2) ?: "")
             }
             if (tax.isBlank()) {
                 val m = taxPattern.matcher(line)
-                if (m.find()) tax = m.group(2) ?: ""
+                if (m.find()) tax = normalizeAmount(m.group(2) ?: "")
             }
         }
 
         // Fallback for total: find maximum decimal value in document if explicit "Total" label missing
         if (total.isBlank()) {
-            val amountPattern = Pattern.compile("([0-9]+[.,][0-9]{2})")
+            val amountPattern = Pattern.compile("([0-9]{1,3}(?:[.,\\s][0-9]{3})+[.,][0-9]{2}|[0-9]+[.,][0-9]{2})")
             var maxAmount = 0.0
             for (line in lines) {
                 val m = amountPattern.matcher(line)
                 while (m.find()) {
-                    val candidate = m.group(1)?.replace(",", ".")?.toDoubleOrNull() ?: 0.0
+                    val candidate = normalizeAmount(m.group(1) ?: "").toDoubleOrNull() ?: 0.0
                     if (candidate > maxAmount && candidate < 100000.0) {
                         maxAmount = candidate
-                        total = String.format("%.2f", candidate)
+                        total = String.format(java.util.Locale.US, "%.2f", candidate)
                     }
                 }
             }
@@ -152,23 +154,34 @@ object OcrEngine {
         )
     }
 
+    /** "1,250.00" / "1.250,00" / "10,60" -> "1250.00" / "1250.00" / "10.60". */
+    internal fun normalizeAmount(raw: String): String {
+        val cleaned = raw.replace(" ", "")
+        val decimalAt = cleaned.length - 3
+        if (decimalAt < 0 || (cleaned[decimalAt] != '.' && cleaned[decimalAt] != ',')) return cleaned
+        val whole = cleaned.substring(0, decimalAt).replace(".", "").replace(",", "")
+        return whole + "." + cleaned.substring(decimalAt + 1)
+    }
+
+    private fun csv(value: String) = "\"" + value.replace("\"", "\"\"") + "\""
+
     /**
      * Export structured receipt or invoice records to CSV string.
      */
     fun exportToCsv(parsed: ReceiptParsedData): String {
         val sb = StringBuilder()
         sb.append("Field,Value\n")
-        sb.append("Merchant,\"${parsed.merchant.replace("\"", "\"\"")}\"\n")
-        sb.append("Invoice Number,\"${parsed.invoiceNumber}\"\n")
-        sb.append("Date,\"${parsed.date}\"\n")
-        sb.append("Currency,\"${parsed.currency}\"\n")
-        sb.append("Subtotal,\"${parsed.subtotal}\"\n")
-        sb.append("Tax/VAT,\"${parsed.tax}\"\n")
-        sb.append("Total,\"${parsed.total}\"\n")
+        sb.append("Merchant,${csv(parsed.merchant)}\n")
+        sb.append("Invoice Number,${csv(parsed.invoiceNumber)}\n")
+        sb.append("Date,${csv(parsed.date)}\n")
+        sb.append("Currency,${csv(parsed.currency)}\n")
+        sb.append("Subtotal,${csv(parsed.subtotal)}\n")
+        sb.append("Tax/VAT,${csv(parsed.tax)}\n")
+        sb.append("Total,${csv(parsed.total)}\n")
         if (parsed.lineItems.isNotEmpty()) {
             sb.append("\nLine Items:\n")
             parsed.lineItems.forEach { item ->
-                sb.append("\"${item.replace("\"", "\"\"")}\"\n")
+                sb.append(csv(item)).append("\n")
             }
         }
         return sb.toString()

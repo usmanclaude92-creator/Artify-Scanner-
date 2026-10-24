@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -31,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -52,7 +54,8 @@ fun CameraPreviewView(
     modifier: Modifier = Modifier,
     isFlashOn: Boolean,
     isAutoCapture: Boolean,
-    onImageCaptured: (Bitmap) -> Unit,
+    onCaptureReady: (ImageCapture?) -> Unit,
+    onAutoCapture: () -> Unit,
     onError: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -63,6 +66,9 @@ fun CameraPreviewView(
     var camera: Camera? by remember { mutableStateOf(null) }
     var previewView: PreviewView? by remember { mutableStateOf(null) }
     var zoomRatio by remember { mutableFloatStateOf(1f) }
+    val autoCaptureEnabled by rememberUpdatedState(isAutoCapture)
+    val autoCaptureCallback by rememberUpdatedState(onAutoCapture)
+    val stabilityDetector = remember { StabilityDetector() }
 
     // Flash control update
     LaunchedEffect(isFlashOn, imageCapture) {
@@ -72,6 +78,7 @@ fun CameraPreviewView(
     DisposableEffect(Unit) {
         onDispose {
             cameraExecutor.shutdown()
+            onCaptureReady(null)
         }
     }
 
@@ -110,6 +117,23 @@ fun CameraPreviewView(
                         .build()
 
                     imageCapture = capture
+                    onCaptureReady(capture)
+
+                    val analysis = ImageAnalysis.Builder()
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also {
+                            it.setAnalyzer(cameraExecutor) { image ->
+                                val trigger = try {
+                                    autoCaptureEnabled && stabilityDetector.shouldCapture(image)
+                                } finally {
+                                    image.close()
+                                }
+                                if (trigger) {
+                                    ContextCompat.getMainExecutor(ctx).execute { autoCaptureCallback() }
+                                }
+                            }
+                        }
                     val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                     try {
@@ -118,7 +142,8 @@ fun CameraPreviewView(
                             lifecycleOwner,
                             cameraSelector,
                             preview,
-                            capture
+                            capture,
+                            analysis
                         )
                     } catch (e: Exception) {
                         onError("Camera initialization failed: ${e.message}")
@@ -261,5 +286,61 @@ fun DocumentScanOverlay(isAutoCapture: Boolean) {
             end = Offset(marginX + docWidth - 8f, laserY),
             strokeWidth = 2.5f * density
         )
+    }
+}
+
+/**
+ * Fires once the viewfinder has been steady on a textured subject (a page, not a blank wall)
+ * for [stableMillis], then stays quiet for [cooldownMillis] so the user can turn the page.
+ */
+class StabilityDetector(
+    private val stableMillis: Long = 1200L,
+    private val cooldownMillis: Long = 3000L
+) {
+    private var previous: IntArray? = null
+    private var stableSince = 0L
+    private var lastTrigger = 0L
+
+    fun shouldCapture(image: ImageProxy): Boolean {
+        val plane = image.planes[0]
+        val buffer = plane.buffer
+        val rowStride = plane.rowStride
+        val pixelStride = plane.pixelStride
+        val grid = 24
+        val sample = IntArray(grid * grid)
+        for (gy in 0 until grid) {
+            for (gx in 0 until grid) {
+                val x = (gx + 0.5f) / grid * image.width
+                val y = (gy + 0.5f) / grid * image.height
+                val pos = y.toInt() * rowStride + x.toInt() * pixelStride
+                sample[gy * grid + gx] = if (pos < buffer.limit()) buffer.get(pos).toInt() and 0xFF else 0
+            }
+        }
+        val now = System.currentTimeMillis()
+        val prev = previous
+        previous = sample
+        if (prev == null) {
+            stableSince = now
+            return false
+        }
+        var diff = 0L
+        for (i in sample.indices) diff += kotlin.math.abs(sample[i] - prev[i])
+        val meanDiff = diff.toFloat() / sample.size
+        val mean = sample.average()
+        var variance = 0.0
+        for (v in sample) variance += (v - mean) * (v - mean)
+        val contrast = kotlin.math.sqrt(variance / sample.size)
+
+        if (meanDiff > 6f) {
+            stableSince = now
+            return false
+        }
+        if (contrast < 12.0 || now - lastTrigger < cooldownMillis) return false
+        if (now - stableSince >= stableMillis) {
+            lastTrigger = now
+            stableSince = now
+            return true
+        }
+        return false
     }
 }

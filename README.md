@@ -22,7 +22,7 @@ Artify Scanner is an advanced, production-grade Android document scanning and pr
 - **Full-Size Inspection**: Interactive inspection of all captured pages.
 - **Page Reordering**: Move pages up/down or reorder sequence before PDF generation.
 - **Rotation**: 90° clockwise and counter-clockwise orientation adjustments.
-- **Perspective Correction & Quad Warping**: Real-time corner adjustment via 4-point mapping.
+- **Perspective Correction**: Automatic page-edge detection (Otsu threshold + largest region) followed by 4-point warping. Manual corner adjustment is not implemented yet.
 - **Enhancement Filters**:
   - `Magic Color`: Enhances clarity, lifts shadows, and sharpens text contrast.
   - `B&W Clean`: High-contrast threshold binarization ideal for contracts, receipts, and signatures.
@@ -40,7 +40,7 @@ Artify Scanner is an advanced, production-grade Android document scanning and pr
   - Configurable page numbering footer (e.g. "Page 1 of 5").
   - Custom watermarks (e.g. "CONFIDENTIAL", "DRAFT").
   - Document metadata: Title, Author, Creator.
-- **Searchable PDF Text Layer**: OCR text embedded invisibly on the PDF page so users can select, copy, and search text in any standard PDF reader.
+- **OCR Text Layer (limited)**: OCR text is drawn invisibly on each page, but Android's `PdfDocument` cannot produce a true searchable text layer, so search/select in third-party PDF readers is not guaranteed. In-app search uses the stored OCR text.
 - **Sharing & Printing**: Integrated Android Sharesheet and native Android `PrintManager` support.
 
 ### 4. On-Device OCR & Structured Expense Extraction
@@ -81,16 +81,18 @@ Artify Scanner is an advanced, production-grade Android document scanning and pr
 | :--- | :--- | :--- |
 | **Continuous Multi-Page Scanning** | ✅ Complete | Retains pages, auto/manual capture, live thumbnails |
 | **Single-File Multi-Page PDF Export** | ✅ Complete | Native `PdfDocument` engine with A4/Letter/Original sizes |
-| **Document Boundary Detection** | ✅ Complete | Viewfinder overlay with animated laser & corner detection |
-| **Perspective Warping** | ✅ Complete | 4-point quadrilateral poly-to-poly matrix mapping |
+| **Document Boundary Detection** | ⚠️ Heuristic | Edge detection on capture; works best on a light page on a darker background. Live overlay is decorative |
+| **Auto-Capture** | ✅ Complete | Fires after the viewfinder is steady on a textured subject for ~1.2 s |
+| **Perspective Warping** | ✅ Complete | 4-point quadrilateral mapping from detected corners; no manual crop editor |
 | **Image Enhancement Filters** | ✅ Complete | Magic Color, B&W Clean, Whitening, Grayscale |
 | **On-Device OCR** | ✅ Complete | ML Kit Text Recognition with text selection and copy |
 | **Receipt & Invoice Parser** | ✅ Complete | Extracts merchant, date, amounts, and exports to CSV |
 | **ID Card / Passport Mode** | ✅ Complete | Front & Back guided capture workflow |
-| **Room Local Persistence** | ✅ Complete | `AppDatabase`, `DocumentDao`, `PageEntity` |
+| **Room Local Persistence** | ✅ Complete | `AppDatabase`, `DocumentDao`, `PageEntity`; no destructive migration |
 | **Document Library & Search** | ✅ Complete | Full-text OCR search, categories, sorting |
 | **PDF Toolkit (Merge, Compress, Sign)** | ✅ Complete | Functional utilities built into Tools screen |
-| **AI Document Assistant** | ✅ Complete | On-device structured reasoning + Gemini API ready |
+| **AI Document Assistant** | ⚠️ Needs setup | Real Gemini calls via Firebase AI Logic; requires `google-services.json`. Sends document text to Google |
+| **App Lock** | ✅ Complete | Biometric / device credential; re-locks after 30 s in background |
 | **Android Sharesheet & Printing** | ✅ Complete | `FileProvider` URI sharing & `PrintManager` adapter |
 
 ---
@@ -114,4 +116,4 @@ gradle :app:testDebugUnitTest
 
 ### External Credentials & Configuration
 - **Core Scanning & PDF Engine**: 100% offline, local-first. No external API keys required.
-- **Gemini AI Assistant**: To use server-side Gemini AI for custom generative prompts, configure `GEMINI_API_KEY` in the Secrets panel in AI Studio or in `.env`.
+- **Gemini AI Assistant**: Uses Firebase AI Logic. Add `app/google-services.json` from a Firebase project with the Gemini Developer API enabled (and App Check for production). Without it the assistant shows a configuration message.

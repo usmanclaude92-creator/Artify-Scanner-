@@ -57,7 +57,11 @@ class DocumentRepository(private val context: Context) {
     }
 
     fun searchDocuments(query: String): Flow<List<ScannedDocumentItem>> {
-        return dao.searchDocuments(query).map { list -> list.map { it.toItem() } }
+        return dao.searchDocuments(query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")).map { list -> list.map { it.toItem() } }
+    }
+
+    suspend fun getOcrText(documentId: String): String {
+        return dao.getDocumentById(documentId)?.ocrFullText ?: ""
     }
 
     suspend fun getDocumentById(id: String): ScannedDocumentItem? {
@@ -194,6 +198,36 @@ class DocumentRepository(private val context: Context) {
         dao.insertDocument(docEntity)
 
         docEntity.toItem()
+    }
+
+    /**
+     * One-time repair for documents saved by earlier versions, whose page images still live in the
+     * evictable cache: copies any surviving files into permanent storage and rewrites the paths.
+     */
+    suspend fun migrateCachedPageImages() = withContext(Dispatchers.IO) {
+        val cachePrefix = context.cacheDir.absolutePath
+        val docs = dao.getAllDocuments().firstOrNull().orEmpty()
+        for (doc in docs) {
+            val pages = dao.getPagesForDocumentSync(doc.id)
+            if (pages.none { it.imagePath.startsWith(cachePrefix) || it.originalImagePath.startsWith(cachePrefix) }) continue
+            val docDir = File(documentsDir, doc.id).apply { mkdirs() }
+            fun move(path: String): String {
+                if (!path.startsWith(cachePrefix)) return path
+                val src = File(path)
+                if (!src.exists()) return path
+                return try {
+                    val dest = File(docDir, src.name)
+                    src.copyTo(dest, overwrite = true)
+                    dest.absolutePath
+                } catch (e: IOException) {
+                    path
+                }
+            }
+            val moved = pages.map { it.copy(imagePath = move(it.imagePath), originalImagePath = move(it.originalImagePath)) }
+            dao.insertPages(moved)
+            val newThumb = moved.firstOrNull()?.imagePath ?: doc.thumbnailPath
+            if (newThumb != doc.thumbnailPath) dao.updateDocument(doc.copy(thumbnailPath = newThumb))
+        }
     }
 
     /** Like [saveScanSession] but returns null instead of throwing when saving fails. */

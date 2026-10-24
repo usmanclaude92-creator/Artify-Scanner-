@@ -125,6 +125,18 @@ fun CameraScannerScreen(
 
     var activeImageCapture: ImageCapture? by remember { mutableStateOf(null) }
 
+    fun captureFromCamera() {
+        if (ScanningSessionManager.isProcessingCapture.value) return
+        takePhoto(
+            context = context,
+            imageCapture = activeImageCapture,
+            onSuccess = { bitmap ->
+                scope.launch { ScanningSessionManager.addPageFromBitmap(context, bitmap) }
+            },
+            onError = { err -> Toast.makeText(context, err, Toast.LENGTH_SHORT).show() }
+        )
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -135,11 +147,8 @@ fun CameraScannerScreen(
             CameraPreviewView(
                 isFlashOn = ScanningSessionManager.isFlashOn.value,
                 isAutoCapture = ScanningSessionManager.isAutoCapture.value,
-                onImageCaptured = { bitmap ->
-                    scope.launch {
-                        ScanningSessionManager.addPageFromBitmap(context, bitmap)
-                    }
-                },
+                onCaptureReady = { activeImageCapture = it },
+                onAutoCapture = { captureFromCamera() },
                 onError = { err ->
                     Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
                 }
@@ -413,37 +422,7 @@ fun CameraScannerScreen(
                         .clip(CircleShape)
                         .background(Color.White)
                         .testTag("shutter_button")
-                        .clickable {
-                            // If CameraPreview is running, simulate shutter capture or grab preview frame
-                            scope.launch {
-                                // Create synthetic high resolution scan page for preview testing
-                                val fakeBitmap = Bitmap.createBitmap(1200, 1600, Bitmap.Config.ARGB_8888)
-                                val canvas = android.graphics.Canvas(fakeBitmap)
-                                canvas.drawColor(android.graphics.Color.WHITE)
-
-                                val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-                                p.color = android.graphics.Color.parseColor("#0F172A")
-                                p.textSize = 42f
-                                p.isFakeBoldText = true
-                                val pageNum = ScanningSessionManager.capturedPages.size + 1
-                                canvas.drawText("ARTIFY SCANNED PAGE #$pageNum", 80f, 160f, p)
-
-                                p.color = android.graphics.Color.parseColor("#475569")
-                                p.textSize = 28f
-                                p.isFakeBoldText = false
-                                canvas.drawText("Timestamp: ${System.currentTimeMillis()}", 80f, 220f, p)
-                                canvas.drawText("High-resolution document capture with perspective correction.", 80f, 270f, p)
-                                canvas.drawText("Page retained in continuous multi-page session.", 80f, 320f, p)
-
-                                // Draw simulated text lines
-                                p.color = android.graphics.Color.parseColor("#94A3B8")
-                                for (y in 400..1400 step 45) {
-                                    canvas.drawRect(80f, y.toFloat(), (300 + (y % 600)).toFloat(), (y + 12).toFloat(), p)
-                                }
-
-                                ScanningSessionManager.addPageFromBitmap(context, fakeBitmap)
-                            }
-                        },
+                        .clickable { captureFromCamera() },
                     contentAlignment = Alignment.Center
                 ) {
                     Box(

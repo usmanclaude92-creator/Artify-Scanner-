@@ -62,13 +62,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.BuildConfig
 import com.example.data.model.ScannedDocumentItem
 import com.example.data.repository.DocumentRepository
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
@@ -92,7 +88,7 @@ fun AiAssistantScreen(
         mutableStateListOf(
             ChatMessage(
                 isUser = false,
-                text = "Welcome to Artify AI Assistant! Select a document above to summarize key terms, extract action items, explain clauses, or ask questions."
+                text = "Welcome to Artify AI Assistant! Select a document above to summarize key terms, extract action items, explain clauses, or ask questions. The recognized text of the selected document is sent to Google Gemini to answer; nothing is sent until you ask."
             )
         )
     }
@@ -106,39 +102,20 @@ fun AiAssistantScreen(
     }
 
     fun generateLocalOrApiAnalysis(prompt: String, doc: ScannedDocumentItem?) {
+        if (doc == null) {
+            messages.add(ChatMessage(isUser = false, text = "Select a document first."))
+            return
+        }
         isThinking = true
         scope.launch {
-            delay(800) // realistic processing feedback
-            val ocr = doc?.ocrSummary ?: ""
-
-            val response = withContext(Dispatchers.Default) {
-                when {
-                    prompt.contains("summar", ignoreCase = true) -> {
-                        "**Executive Summary of ${doc?.title ?: "Document"}**:\n\n" +
-                        "• Document Type: ${doc?.category?.displayName ?: "General Document"}\n" +
-                        "• Page Count: ${doc?.pageCount ?: 1} pages\n" +
-                        "• Key Content: ${if (ocr.isNotBlank()) ocr.take(300) else "Standard business agreement / record."}\n\n" +
-                        "All essential provisions appear intact. No immediate compliance flags detected."
-                    }
-                    prompt.contains("date", ignoreCase = true) || prompt.contains("action", ignoreCase = true) -> {
-                        "**Extracted Dates & Action Items**:\n\n" +
-                        "1. Payment Due Date / Fulfillment: Review terms within 14 days of scan.\n" +
-                        "2. Record Retention: Recommended storage period is 7 years for tax & audit purposes.\n" +
-                        "3. Signatures: Valid verification completed on-device."
-                    }
-                    prompt.contains("clause", ignoreCase = true) || prompt.contains("explain", ignoreCase = true) -> {
-                        "**Plain Language Clause Explanation**:\n\n" +
-                        "The clauses in '${doc?.title ?: "Document"}' define the rights, liability caps, and delivery schedules. The governing terms protect both parties against unforeseen service interruptions while establishing clear payment milestones."
-                    }
-                    else -> {
-                        "Based on the OCR content of **${doc?.title ?: "this document"}**:\n\n" +
-                        "${if (ocr.isNotBlank()) ocr.take(250) else "Document scanned with Artify Scanner high-clarity engine."}\n\n" +
-                        "Let me know if you would like me to generate a checklist, translate, or extract expense items!"
-                    }
-                }
-            }
-
-            messages.add(ChatMessage(isUser = false, text = response))
+            val ocr = repository.getOcrText(doc.id)
+            val result = DocumentAi.ask(doc.title, ocr, prompt)
+            messages.add(
+                ChatMessage(
+                    isUser = false,
+                    text = result.getOrElse { DocumentAi.describeError(it) }
+                )
+            )
             isThinking = false
         }
     }
