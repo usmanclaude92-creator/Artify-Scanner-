@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
@@ -193,23 +194,13 @@ fun DocumentDetailScreen(
 
     Scaffold(
         topBar = {
+            var menuOpen by remember { mutableStateOf(false) }
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = document?.title ?: "Document",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            maxLines = 1
-                        )
-                        document?.let { doc ->
-                            val formattedDate = SimpleDateFormat("MMM dd, yyyy • HH:mm", Locale.getDefault()).format(Date(doc.updatedAt))
-                            Text(
-                                text = "$formattedDate • ${doc.pageCount}p",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    Text(
+                        text = "Document Details",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                    )
                 },
                 navigationIcon = {
                     IconButton(
@@ -221,29 +212,24 @@ fun DocumentDetailScreen(
                 },
                 actions = {
                     document?.let { doc ->
-                        IconButton(onClick = {
-                            showRenameDialog = true
-                            renameInput = doc.title
-                        }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Rename")
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More")
                         }
-                        IconButton(onClick = {
-                            PdfShareUtil.openPdf(context, File(doc.pdfFilePath))
-                        }) {
-                            Icon(Icons.Default.FileOpen, contentDescription = "Open in PDF Viewer")
-                        }
-                        IconButton(onClick = {
-                            PdfShareUtil.sharePdf(context, File(doc.pdfFilePath), "Share ${doc.title}")
-                        }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share")
-                        }
-                        IconButton(onClick = {
-                            PdfShareUtil.printPdf(context, File(doc.pdfFilePath))
-                        }) {
-                            Icon(Icons.Default.Print, contentDescription = "Print")
-                        }
-                        IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                        androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Print") },
+                                onClick = {
+                                    menuOpen = false
+                                    PdfShareUtil.printPdf(context, File(doc.pdfFilePath))
+                                }
+                            )
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Open in PDF viewer") },
+                                onClick = {
+                                    menuOpen = false
+                                    PdfShareUtil.openPdf(context, File(doc.pdfFilePath))
+                                }
+                            )
                         }
                     }
                 }
@@ -278,28 +264,28 @@ fun DocumentDetailScreen(
                         .background(MaterialTheme.colorScheme.background)
                 ) {
                     PrimaryTabRow(selectedTabIndex = selectedTab) {
-                        Tab(
-                            selected = selectedTab == 0,
-                            onClick = { selectedTab = 0 },
-                            text = { Text("Pages (${pages.size})") },
-                            icon = { Icon(Icons.Default.PictureAsPdf, null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 1,
-                            onClick = { selectedTab = 1 },
-                            text = { Text("OCR Text") },
-                            icon = { Icon(Icons.Default.Description, null, modifier = Modifier.size(18.dp)) }
-                        )
-                        Tab(
-                            selected = selectedTab == 2,
-                            onClick = { selectedTab = 2 },
-                            text = { Text("Receipt / Invoice") },
-                            icon = { Icon(Icons.Default.Receipt, null, modifier = Modifier.size(18.dp)) }
-                        )
+                        listOf("Details", "Pages (${pages.size})", "OCR Text", "Invoice").forEachIndexed { i, label ->
+                            Tab(
+                                selected = selectedTab == i,
+                                onClick = { selectedTab = i },
+                                text = { Text(label, maxLines = 1, softWrap = false) }
+                            )
+                        }
                     }
 
                     when (selectedTab) {
-                        0 -> {
+                        0 -> DocumentInfoTab(
+                            doc = doc,
+                            onShare = { PdfShareUtil.sharePdf(context, File(doc.pdfFilePath), "Share ${doc.title}") },
+                            onOpen = { PdfShareUtil.openPdf(context, File(doc.pdfFilePath)) },
+                            onRename = {
+                                showRenameDialog = true
+                                renameInput = doc.title
+                            },
+                            onDelete = { showDeleteDialog = true }
+                        )
+
+                        1 -> {
                             // PAGES TAB
                             Column(modifier = Modifier.fillMaxSize()) {
                                 // Full page display
@@ -375,7 +361,7 @@ fun DocumentDetailScreen(
                             }
                         }
 
-                        1 -> {
+                        2 -> {
                             // OCR TEXT TAB
                             val fullOcr = pages.joinToString("\n\n--- Page Break ---\n\n") { it.ocrText }
                             Column(
@@ -424,7 +410,7 @@ fun DocumentDetailScreen(
                             }
                         }
 
-                        2 -> {
+                        3 -> {
                             // STRUCTURED RECEIPT / INVOICE TAB
                             val parsed = parsedReceipt ?: OcrEngine.parseReceiptOrInvoice(doc.ocrSummary)
                             Column(

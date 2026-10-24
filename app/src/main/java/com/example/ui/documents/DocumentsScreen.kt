@@ -56,6 +56,7 @@ import com.example.data.model.ScannedDocumentItem
 import com.example.data.repository.DocumentRepository
 import com.example.pdf.PdfShareUtil
 import com.example.ui.components.DocumentCardItem
+import com.example.ui.components.ScreenTitle
 import com.example.ui.components.EmptyDocumentsView
 import kotlinx.coroutines.launch
 import java.io.File
@@ -171,28 +172,6 @@ fun DocumentsScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Document Library",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                },
-                actions = {
-                    IconButton(
-                        onClick = { onlyFavorites = !onlyFavorites },
-                        modifier = Modifier.testTag("filter_favorites_button")
-                    ) {
-                        Icon(
-                            imageVector = if (onlyFavorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorites",
-                            tint = if (onlyFavorites) androidx.compose.ui.graphics.Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            )
-        }
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -201,9 +180,25 @@ fun DocumentsScreen(
                 .background(MaterialTheme.colorScheme.background),
             contentPadding = PaddingValues(bottom = 88.dp)
         ) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { ScreenTitle("Documents", "All your scans in one place") }
+                    IconButton(
+                        onClick = { onlyFavorites = !onlyFavorites },
+                        modifier = Modifier.padding(end = 12.dp).testTag("filter_favorites_button")
+                    ) {
+                        Icon(
+                            imageVector = if (onlyFavorites) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Favorites",
+                            tint = if (onlyFavorites) androidx.compose.ui.graphics.Color(0xFFF43F5E) else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             // Search field
             item {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -217,7 +212,12 @@ fun DocumentsScreen(
                             }
                         },
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("documents_search_input")
@@ -239,6 +239,7 @@ fun DocumentsScreen(
                                     onlyFavorites = false
                                     selectedCategory = category
                                 },
+                                shape = RoundedCornerShape(20.dp),
                                 label = { Text(category.displayName, fontSize = 12.sp) }
                             )
                         }
@@ -280,7 +281,7 @@ fun DocumentsScreen(
                 }
             } else {
                 items(sortedDocs, key = { it.id }) { doc ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp)) {
                         DocumentCardItem(
                             document = doc,
                             onClick = { onOpenDocument(doc.id) },
