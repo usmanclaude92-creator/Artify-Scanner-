@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -117,6 +118,37 @@ fun ArtifyScannerApp() {
     LaunchedEffect(Unit) {
         repository.migrateCachedPageImages()
         repository.seedSampleDocumentsIfEmpty()
+    }
+
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+
+    // Google ML Kit Document Scanner is the default scanner; its cropped pages join the session
+    val googleScannerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val scan = com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+        if (result.resultCode == android.app.Activity.RESULT_OK && scan != null) {
+            if (navController.currentBackStackEntry?.destination?.route != Screen.DocumentReview.route) {
+                navController.navigate(Screen.DocumentReview.route)
+            }
+            scope.launch {
+                for (page in scan.pages.orEmpty()) {
+                    ScanningSessionManager.addPageFromUri(
+                        context, page.imageUri, com.example.data.model.ScanFilter.ORIGINAL, autoCrop = false
+                    )
+                }
+            }
+        }
+    }
+
+    fun launchGoogleScanner(maxPages: Int) {
+        val activity = context as? android.app.Activity ?: return
+        com.example.camera.MlKitScanner.createIntentSender(
+            activity = activity,
+            maxPages = maxPages,
+            onReady = { googleScannerLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(it).build()) },
+            onError = { android.widget.Toast.makeText(context, "Google scanner unavailable: $it", android.widget.Toast.LENGTH_LONG).show() }
+        )
     }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -221,7 +253,12 @@ fun ArtifyScannerApp() {
                     repository = repository,
                     onStartScan = { mode ->
                         ScanningSessionManager.startNewSession(mode)
-                        navController.navigate(Screen.CameraScanner.route)
+                        if (mode == com.example.data.model.ScanMode.BURST_SCAN || mode == com.example.data.model.ScanMode.WIDE_CAMERA) {
+                            // Our own camera: Burst Scan and ultra-wide manual shooting
+                            navController.navigate(Screen.CameraScanner.route)
+                        } else {
+                            launchGoogleScanner(if (mode == com.example.data.model.ScanMode.ID_CARD) 2 else 30)
+                        }
                     },
                     onOpenDocument = { docId ->
                         navController.navigate(Screen.DocumentDetail.createRoute(docId))
@@ -283,6 +320,14 @@ fun ArtifyScannerApp() {
                     repository = repository,
                     onNavigateBackToCamera = {
                         navController.popBackStack()
+                    },
+                    onAddPages = {
+                        // Pages came from our own camera: go back to it. Otherwise add more with Google's scanner.
+                        if (navController.previousBackStackEntry?.destination?.route == Screen.CameraScanner.route) {
+                            navController.popBackStack()
+                        } else {
+                            launchGoogleScanner(30)
+                        }
                     },
                     onFinishAndGoHome = {
                         navController.navigate(Screen.Home.route) {

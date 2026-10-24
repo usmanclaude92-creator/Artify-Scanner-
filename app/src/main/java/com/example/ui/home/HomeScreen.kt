@@ -377,6 +377,26 @@ fun HomeScreen(
                             modifier = Modifier.weight(1f)
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        QuickActionTile(
+                            title = "Wide Camera",
+                            subtitle = "Ultra-wide shots",
+                            icon = Icons.Default.CameraAlt,
+                            iconBgColor = Color(0xFF8B5CF6),
+                            onClick = {
+                                ScanningSessionManager.startNewSession(ScanMode.WIDE_CAMERA)
+                                onStartScan(ScanMode.WIDE_CAMERA)
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.weight(2f))
+                    }
                 }
             }
 

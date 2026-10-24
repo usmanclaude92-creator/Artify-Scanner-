@@ -13,6 +13,7 @@ Artify Scanner is an advanced, production-grade Android document scanning and pr
 - **Zero-Restart Workflow**: Point the camera and capture an entire stack of paper continuously without leaving the viewfinder.
 - **Session Resilience**: Captured pages are safely preserved in app storage throughout the session.
 - **Live Viewfinder HUD**: Real-time document boundary detection overlay, animated laser scan beam, corner brackets, and stability feedback.
+- **Google scanner by default**: Start Scanning, Scan Receipt, Scan ID Card and Review → Add Page use Google's ML Kit Document Scanner (on-device ML edge detection, crop and clean-up, via Google Play services, no API key). Burst Scan and Wide Camera keep the app's own camera (hands-free capture and ultra-wide lens).
 - **Smart Scan**: One tap opens Google's ML Kit Document Scanner (accurate live edge detection, auto-capture, crop, enhancement) and imports the pages into the session.
 - **Auto-Capture & Manual Shutter**: Toggle between smart auto-capture and manual trigger.
 - **In-Session Thumbnail Strip**: Live carousel showing captured pages with page counter ("Page 3", etc.).

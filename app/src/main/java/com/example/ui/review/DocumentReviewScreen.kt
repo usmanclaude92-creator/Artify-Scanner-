@@ -103,6 +103,7 @@ import java.util.Locale
 fun DocumentReviewScreen(
     repository: DocumentRepository,
     onNavigateBackToCamera: () -> Unit,
+    onAddPages: () -> Unit,
     onFinishAndGoHome: () -> Unit,
     onOpenDocumentDetail: (String) -> Unit
 ) {
@@ -223,7 +224,7 @@ fun DocumentReviewScreen(
                 actions = {
                     // Add more from camera
                     IconButton(
-                        onClick = onNavigateBackToCamera,
+                        onClick = onAddPages,
                         modifier = Modifier.testTag("add_pages_camera_button")
                     ) {
                         Icon(Icons.Default.CameraAlt, contentDescription = "Add page with camera")
@@ -258,7 +259,7 @@ fun DocumentReviewScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onNavigateBackToCamera,
+                        onClick = onAddPages,
                         modifier = Modifier.weight(1f)
                     ) {
                         Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(18.dp))
