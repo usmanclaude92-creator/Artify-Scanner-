@@ -18,7 +18,7 @@ class BurstTrigger {
     data class Status(
         val phase: Phase = Phase.SEARCHING,
         val progress: Float = 0f,
-        val message: String = "Scanning..."
+        val message: String = "Scanning\u2026"
     )
 
     val status = mutableStateOf(Status())
@@ -55,7 +55,7 @@ class BurstTrigger {
         sawMovement = false
         prev = null
         phase = Phase.SEARCHING
-        publish(Phase.SEARCHING, 0f, "Scanning...")
+        publish(Phase.SEARCHING, 0f, "Scanning\u2026")
     }
 
     fun analyze(image: ImageProxy) {
@@ -75,7 +75,7 @@ class BurstTrigger {
             // A dark frame (lens covered, no light) is never a page
             if (sig.average() < MIN_LUMA) {
                 steadyTicks = 0
-                if (phase != Phase.TURN_PAGE) publish(Phase.SEARCHING, 0f, "Scanning...")
+                if (phase != Phase.TURN_PAGE) publish(Phase.SEARCHING, 0f, "Scanning\u2026")
                 return
             }
 
@@ -84,7 +84,7 @@ class BurstTrigger {
                 if (sawMovement && motion < STEADY_MOTION) {
                     phase = Phase.SEARCHING
                     steadyTicks = 0
-                    publish(Phase.SEARCHING, 0f, "Scanning... hold steady")
+                    publish(Phase.SEARCHING, 0f, "Scanning\u2026 hold steady")
                 } else {
                     publish(Phase.TURN_PAGE, 0f, "Captured. Turn the page...")
                 }
@@ -94,7 +94,7 @@ class BurstTrigger {
             steadyTicks = if (motion < STEADY_MOTION) steadyTicks + 1 else 0
             if (steadyTicks == 0) {
                 phase = Phase.SEARCHING
-                publish(Phase.SEARCHING, 0f, "Scanning... hold steady")
+                publish(Phase.SEARCHING, 0f, "Scanning\u2026 hold steady")
             } else if (steadyTicks >= NEEDED_TICKS) {
                 captureInFlight = true
                 phase = Phase.CAPTURING
@@ -102,7 +102,7 @@ class BurstTrigger {
                 main.post { onCaptureRequested?.invoke() }
             } else {
                 phase = Phase.HOLD
-                publish(Phase.HOLD, steadyTicks.toFloat() / NEEDED_TICKS, "Scanning... hold steady")
+                publish(Phase.HOLD, steadyTicks.toFloat() / NEEDED_TICKS, "Scanning\u2026 hold steady")
             }
         } catch (e: Exception) {
             android.util.Log.w("Artify", "Burst analysis failed", e)

@@ -17,7 +17,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.filled.FlashOff
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.filled.FlashOn
@@ -193,10 +197,12 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
         onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
     }
 
+    val ui = FontFamily.SansSerif
+
     Column(Modifier.fillMaxSize().background(panel)) {
-        // Top bar: close left, flash right, Done once there are pages
+        // Top bar (80dp): close and flash centred 56dp from the top, 28dp from the sides
         Row(
-            Modifier.fillMaxWidth().height(80.dp).background(Color.Black).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().height(80.dp).background(Color.Black).padding(start = 4.dp, end = 4.dp, top = 32.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White) }
@@ -208,7 +214,7 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                    Text("  Done ($pageCount)", color = Color.Black, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text("  Done ($pageCount)", color = Color.Black, fontSize = 14.sp, fontFamily = ui, fontWeight = FontWeight.Medium)
                 }
             }
             IconButton(onClick = {
@@ -219,80 +225,88 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
             }
         }
 
-        // Camera preview (4:3, full width) with Google's status pill
+        // Camera preview (4:3, full width) with the status pill
         Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).background(Color.Black)) {
             AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
-            Text(
-                status.message,
-                color = Color.White,
-                fontSize = 17.sp,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp)
-                    .clip(RoundedCornerShape(24.dp)).background(Color(0xCC202124)).padding(horizontal = 22.dp, vertical = 11.dp)
-            )
+            Box(
+                Modifier.align(Alignment.TopCenter).padding(top = 20.dp).height(44.dp)
+                    .clip(RoundedCornerShape(22.dp)).background(Color(0xCC202124)).padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(status.message, color = Color.White, fontSize = 16.sp, fontFamily = ui)
+            }
         }
 
-        Spacer(Modifier.height(26.dp))
+        Spacer(Modifier.height(25.dp))
 
-        // Page thumbnail, shutter, undo
-        Box(Modifier.fillMaxWidth().height(76.dp)) {
+        // Page thumbnail (52dp), shutter (73dp), undo (52dp), centres 99dp from the sides
+        Box(Modifier.fillMaxWidth().height(73.dp)) {
             Box(
-                Modifier.align(Alignment.CenterStart).padding(start = 70.dp).size(54.dp)
-                    .border(2.dp, Color.White, CircleShape).padding(4.dp).clip(CircleShape),
+                Modifier.align(Alignment.CenterStart).padding(start = 73.dp).size(52.dp)
+                    .border(1.5.dp, Color.White, CircleShape).padding(3.dp).clip(CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 if (lastPage != null) {
                     AsyncImage(model = File(lastPage.localImagePath), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     Text(
-                        "$pageCount", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                        "$pageCount", color = Color.White, fontSize = 14.sp, fontFamily = ui, fontWeight = FontWeight.Bold,
                         modifier = Modifier.background(Color(0x99000000), CircleShape).padding(horizontal = 7.dp, vertical = 1.dp)
                     )
                 } else {
-                    Icon(Icons.Default.Image, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Outlined.Image, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
             }
             Box(
-                Modifier.align(Alignment.Center).size(76.dp).border(3.dp, Color.White, CircleShape).padding(6.dp).clip(CircleShape)
+                Modifier.align(Alignment.Center).size(73.dp).border(3.dp, Color.White, CircleShape).padding(6.dp).clip(CircleShape)
                     .background(Color.White)
                     .clickable(enabled = status.phase != BurstTrigger.Phase.CAPTURING) { takePage() }
             )
             Box(
-                Modifier.align(Alignment.CenterEnd).padding(end = 70.dp).size(54.dp)
-                    .border(2.dp, if (pageCount > 0) Color.White else Color(0x55FFFFFF), CircleShape).clip(CircleShape)
+                Modifier.align(Alignment.CenterEnd).padding(end = 73.dp).size(52.dp)
+                    .border(1.5.dp, if (pageCount > 0) Color.White else Color(0x55FFFFFF), CircleShape).clip(CircleShape)
                     .clickable(enabled = pageCount > 0) { ScanningSessionManager.removeLastPage() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo last page",
-                    tint = if (pageCount > 0) Color.White else Color(0x55FFFFFF), modifier = Modifier.size(24.dp)
+                    tint = if (pageCount > 0) Color.White else Color(0x55FFFFFF), modifier = Modifier.size(20.dp)
                 )
             }
         }
 
-        // Manual | Auto capture selector
+        // Manual | Auto capture selector: 220dp x 40dp
         Row(
-            Modifier.align(Alignment.CenterHorizontally).padding(top = 18.dp)
-                .clip(RoundedCornerShape(24.dp)).background(Color(0xFF2B2B2B))
+            Modifier.align(Alignment.CenterHorizontally).padding(top = 26.dp)
+                .height(40.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFF2B2B2B))
         ) {
             listOf(false to "Manual", true to "Auto capture").forEach { (auto, label) ->
                 val selected = autoMode == auto
-                Text(
-                    label,
-                    color = if (selected) Color.Black else Color.White,
-                    fontSize = 16.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(24.dp))
+                Box(
+                    Modifier.width(if (auto) 132.dp else 88.dp).fillMaxHeight().clip(RoundedCornerShape(20.dp))
                         .background(if (selected) Color(0xFFE8EAED) else Color.Transparent)
-                        .clickable { autoMode = auto; trigger.enabled = auto }
-                        .padding(horizontal = 24.dp, vertical = 10.dp)
-                )
+                        .clickable { autoMode = auto; trigger.enabled = auto },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, color = if (selected) Color.Black else Color.White, fontSize = 16.sp, fontFamily = ui, maxLines = 1)
+                }
             }
         }
 
-        Text(
-            "Artify Scanner will have access only to the images that you scan",
-            color = Color.White,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 12.dp)
-        )
+        // Footer with the info icon
+        Row(
+            Modifier.fillMaxWidth().padding(start = 30.dp, end = 26.dp, top = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Artify Scanner will have access only to the images that you scan",
+                color = Color.White,
+                fontSize = 12.sp,
+                lineHeight = 18.sp,
+                fontFamily = ui,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f).padding(end = 12.dp)
+            )
+            Icon(Icons.Outlined.Info, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+        }
     }
 }
