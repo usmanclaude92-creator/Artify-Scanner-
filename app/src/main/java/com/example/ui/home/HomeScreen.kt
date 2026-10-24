@@ -5,6 +5,22 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import com.example.ui.theme.BrandViolet
+import com.example.ui.theme.BrandPink
+import com.example.ui.theme.BrandOrange
+import com.example.ui.theme.BrandGreen
+import com.example.ui.theme.BrandBlue
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.GradientButton
+import com.example.ui.components.FeatureChip
+import com.example.ui.components.BrandHeader
+import com.example.ui.components.ActionCard
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.BurstMode
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -91,16 +107,8 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedCategory by remember { mutableStateOf(DocumentCategory.ALL) }
-
-    val documents by if (searchQuery.isNotBlank()) {
-        repository.searchDocuments(searchQuery).collectAsState(initial = emptyList())
-    } else if (selectedCategory != DocumentCategory.ALL) {
-        repository.getDocumentsByCategory(selectedCategory).collectAsState(initial = emptyList())
-    } else {
-        repository.getAllDocuments().collectAsState(initial = emptyList())
-    }
+    val allDocuments by repository.getAllDocuments().collectAsState(initial = emptyList())
+    val documents = allDocuments.take(6)
 
     var documentToRename by remember { mutableStateOf<ScannedDocumentItem?>(null) }
     var renameInput by remember { mutableStateOf("") }
@@ -190,309 +198,138 @@ fun HomeScreen(
         )
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    ScanningSessionManager.startNewSession(ScanMode.BATCH_DOCUMENTS)
-                    onStartScan(ScanMode.BATCH_DOCUMENTS)
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
-                modifier = Modifier.testTag("home_fab_scan")
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        item { BrandHeader() }
+
+        // Hero: headline, primary scan button and the three promises
+        item {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.surface)
+                        )
+                    )
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(26.dp))
+                    .padding(20.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.DocumentScanner,
-                    contentDescription = "Scan Document",
-                    modifier = Modifier.size(28.dp)
+                Text(
+                    "Capture anything.\nTurn it digital.",
+                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = 26.sp, lineHeight = 34.sp)
                 )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Scan, organize and share your documents in seconds.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(18.dp))
+                GradientButton(
+                    text = "Scan Document (Multi-Page)",
+                    icon = Icons.Default.CameraAlt,
+                    onClick = {
+                        ScanningSessionManager.startNewSession(ScanMode.BATCH_DOCUMENTS)
+                        onStartScan(ScanMode.BATCH_DOCUMENTS)
+                    },
+                    modifier = Modifier.testTag("hero_start_scanning_button")
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    FeatureChip(Icons.Default.CenterFocusStrong, "Auto Detect")
+                    FeatureChip(Icons.Default.HighQuality, "High Quality")
+                    FeatureChip(Icons.Default.PictureAsPdf, "PDF Output")
+                }
             }
         }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(bottom = 88.dp)
-        ) {
-            // Header: Brand & Tagline
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF0F172A),
-                                    Color(0xFF1E293B)
-                                )
-                            )
-                        )
-                        .padding(horizontal = 20.dp, vertical = 24.dp)
-                ) {
-                    Column {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFF0284C7)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DocumentScanner,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Artify Scanner",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 22.sp
-                                )
-                            )
-                        }
 
-                        Spacer(modifier = Modifier.height(6.dp))
+        item { Spacer(Modifier.height(10.dp)); SectionHeader("Quick Actions") }
 
-                        Text(
-                            text = "Every Document. Perfectly Captured.",
-                            color = Color(0xFF38BDF8),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
-                        )
-
-                        Spacer(modifier = Modifier.height(18.dp))
-
-                        // Large Hero Start Scanning Button
-                        Button(
-                            onClick = {
-                                ScanningSessionManager.startNewSession(ScanMode.BATCH_DOCUMENTS)
-                                onStartScan(ScanMode.BATCH_DOCUMENTS)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(56.dp)
-                                .testTag("hero_start_scanning_button"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF0284C7)
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "Start Scanning (Multi-Page)",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Quick Actions 2x2 Grid
-            item {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Quick Actions",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        QuickActionTile(
-                            title = "Scan Receipt",
-                            subtitle = "Expense OCR",
-                            icon = Icons.Default.ReceiptLong,
-                            iconBgColor = Color(0xFF059669),
-                            onClick = {
-                                ScanningSessionManager.startNewSession(ScanMode.RECEIPT_INVOICE)
-                                onStartScan(ScanMode.RECEIPT_INVOICE)
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        QuickActionTile(
-                            title = "Scan ID Card",
-                            subtitle = "Front & Back",
-                            icon = Icons.Default.Badge,
-                            iconBgColor = Color(0xFFD97706),
-                            onClick = {
-                                ScanningSessionManager.startNewSession(ScanMode.ID_CARD)
-                                onStartScan(ScanMode.ID_CARD)
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        QuickActionTile(
-                            title = "Burst Scan",
-                            subtitle = "Hands-free pages",
-                            icon = Icons.Default.CameraAlt,
-                            iconBgColor = Color(0xFF10B981),
-                            onClick = {
-                                ScanningSessionManager.startNewSession(ScanMode.BURST_SCAN)
-                                onStartScan(ScanMode.BURST_SCAN)
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        QuickActionTile(
-                            title = "Import Files",
-                            subtitle = "Photos & PDFs",
-                            icon = Icons.Default.UploadFile,
-                            iconBgColor = Color(0xFF6366F1),
-                            onClick = { importLauncher.launch("image/*") },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        QuickActionTile(
-                            title = "PDF Toolkit",
-                            subtitle = "Merge & Sign",
-                            icon = Icons.Default.DocumentScanner,
-                            iconBgColor = Color(0xFF0284C7),
-                            onClick = onNavigateToTools,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        QuickActionTile(
-                            title = "Wide Camera",
-                            subtitle = "Ultra-wide shots",
-                            icon = Icons.Default.CameraAlt,
-                            iconBgColor = Color(0xFF8B5CF6),
-                            onClick = {
-                                ScanningSessionManager.startNewSession(ScanMode.WIDE_CAMERA)
-                                onStartScan(ScanMode.WIDE_CAMERA)
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(modifier = Modifier.weight(2f))
-                    }
-                }
-            }
-
-            // Search Bar & Filter Chips
-            item {
-                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Search title, tags, or OCR text...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        trailingIcon = {
-                            if (searchQuery.isNotBlank()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
-                                }
-                            }
+        item {
+            Column(modifier = Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionCard(
+                        title = "Receipt", subtitle = "OCR",
+                        icon = Icons.Default.ReceiptLong, tint = BrandGreen,
+                        onClick = {
+                            ScanningSessionManager.startNewSession(ScanMode.RECEIPT_INVOICE)
+                            onStartScan(ScanMode.RECEIPT_INVOICE)
                         },
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("home_search_bar")
+                        modifier = Modifier.weight(1f)
                     )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Category Filter Row
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        DocumentCategory.values().forEach { category ->
-                            FilterChip(
-                                selected = selectedCategory == category,
-                                onClick = { selectedCategory = category },
-                                label = { Text(category.displayName, fontSize = 12.sp) }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (searchQuery.isNotBlank()) "Search Results" else "Recent Documents",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "${documents.size} saved",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    ActionCard(
+                        title = "ID Card", subtitle = "Front & Back",
+                        icon = Icons.Default.Badge, tint = BrandBlue,
+                        onClick = {
+                            ScanningSessionManager.startNewSession(ScanMode.ID_CARD)
+                            onStartScan(ScanMode.ID_CARD)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionCard(
+                        title = "Burst Scan", subtitle = "Hands-free",
+                        icon = Icons.Default.BurstMode, tint = BrandViolet,
+                        onClick = {
+                            ScanningSessionManager.startNewSession(ScanMode.BURST_SCAN)
+                            onStartScan(ScanMode.BURST_SCAN)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ActionCard(
+                        title = "Import Files", subtitle = "Photos & PDFs",
+                        icon = Icons.Default.UploadFile, tint = Color(0xFF6366F1),
+                        onClick = { importLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionCard(
+                        title = "Wide Camera", subtitle = "Ultra-wide shots",
+                        icon = Icons.Default.PhotoCamera, tint = BrandOrange,
+                        onClick = {
+                            ScanningSessionManager.startNewSession(ScanMode.WIDE_CAMERA)
+                            onStartScan(ScanMode.WIDE_CAMERA)
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ActionCard(
+                        title = "PDF Tools", subtitle = "Merge & Sign",
+                        icon = Icons.Default.DocumentScanner, tint = BrandPink,
+                        onClick = onNavigateToTools,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
+        }
 
-            // Documents List
-            if (documents.isEmpty()) {
-                item {
-                    EmptyDocumentsView(
-                        message = if (searchQuery.isNotBlank()) "No matching documents" else "No documents yet. Tap Start Scanning!"
+        item { Spacer(Modifier.height(10.dp)); SectionHeader("Recent Documents", "View All", onNavigateToDocuments) }
+
+        if (documents.isEmpty()) {
+            item { EmptyDocumentsView(message = "No documents yet. Tap Scan Document!") }
+        } else {
+            items(documents, key = { it.id }) { doc ->
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 5.dp)) {
+                    DocumentCardItem(
+                        document = doc,
+                        onClick = { onOpenDocument(doc.id) },
+                        onToggleFavorite = { scope.launch { repository.toggleFavorite(doc.id, doc.isFavorite) } },
+                        onShare = { PdfShareUtil.sharePdf(context, File(doc.pdfFilePath), "Share ${doc.title}") },
+                        onPrint = { PdfShareUtil.printPdf(context, File(doc.pdfFilePath)) },
+                        onRename = {
+                            documentToRename = doc
+                            renameInput = doc.title
+                        },
+                        onDelete = { documentToDelete = doc }
                     )
-                }
-            } else {
-                items(documents, key = { it.id }) { doc ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                        DocumentCardItem(
-                            document = doc,
-                            onClick = { onOpenDocument(doc.id) },
-                            onToggleFavorite = {
-                                scope.launch {
-                                    repository.toggleFavorite(doc.id, doc.isFavorite)
-                                }
-                            },
-                            onShare = {
-                                PdfShareUtil.sharePdf(context, File(doc.pdfFilePath), "Share ${doc.title}")
-                            },
-                            onPrint = {
-                                PdfShareUtil.printPdf(context, File(doc.pdfFilePath))
-                            },
-                            onRename = {
-                                documentToRename = doc
-                                renameInput = doc.title
-                            },
-                            onDelete = {
-                                documentToDelete = doc
-                            }
-                        )
-                    }
                 }
             }
         }

@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.fragment.app.FragmentActivity
 import com.example.security.AppLock
+import com.example.ui.splash.SplashScreen
+import com.example.ui.theme.ThemeController
 import com.example.ui.security.LockScreen
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -40,6 +42,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -96,12 +99,25 @@ class MainActivity : FragmentActivity() {
         ScanningSessionManager.init(applicationContext, restore = savedInstanceState != null)
         applySecureFlag()
         enableEdgeToEdge()
+        ThemeController.init(this)
+        val showSplashAtStart = savedInstanceState == null
         setContent {
             ArtifyScannerTheme {
-                if (AppLock.locked.value) {
-                    LockScreen(activity = this)
-                } else {
-                    ArtifyScannerApp()
+                var showSplash by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(showSplashAtStart) }
+                LaunchedEffect(Unit) {
+                    kotlinx.coroutines.delay(1400)
+                    showSplash = false
+                }
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    if (AppLock.locked.value) {
+                        LockScreen(activity = this@MainActivity)
+                    } else {
+                        ArtifyScannerApp()
+                    }
+                    AnimatedVisibility(
+                        visible = showSplash,
+                        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(350))
+                    ) { SplashScreen() }
                 }
             }
         }
@@ -211,7 +227,7 @@ fun ArtifyScannerApp() {
             ) {
                 NavigationBar(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp
+                    tonalElevation = 0.dp
                 ) {
                     bottomNavItems.forEach { item ->
                         val isSelected = currentRoute == item.route
@@ -234,7 +250,22 @@ fun ArtifyScannerApp() {
                                     contentDescription = item.label
                                 )
                             },
-                            label = { Text(item.label) },
+                            label = {
+                                Text(
+                                    item.label,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Normal
+                                )
+                            },
+                            colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
                             modifier = Modifier.testTag(item.testTag)
                         )
                     }
