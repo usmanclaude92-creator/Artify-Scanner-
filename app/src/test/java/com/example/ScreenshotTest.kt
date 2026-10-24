@@ -22,7 +22,6 @@ import com.example.ui.components.DocumentCardItem
 import com.example.ui.auth.AuthScreen
 import com.example.ui.components.AppHeader
 import com.example.ui.profile.ProfileScreen
-import com.example.ui.scan.ScanIntroScreen
 import com.example.ui.home.HomeScreen
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.splash.SplashScreen
@@ -100,7 +99,6 @@ class ScreenshotTest {
         AuthScreen(false, true, { _, _, _ -> null }, { _, _ -> null }, { null }, { null }, {}, {})
     }
 
-    @Test fun scanIntro() = shot("scan_intro", true) { ScanIntroScreen({}, {}) }
 
     @Test fun headerLight() = shot("header_light", false) { AppHeader({}) }
 

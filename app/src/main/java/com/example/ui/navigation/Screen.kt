@@ -6,7 +6,7 @@ sealed class Screen(val route: String) {
     object Tools : Screen("tools")
     object AiAssistant : Screen("ai_assistant")
     object Settings : Screen("settings")
-    object ScanIntro : Screen("scan_intro")
+    object BurstCamera : Screen("burst_camera")
     object Profile : Screen("profile")
     object DocumentReview : Screen("document_review")
     object DocumentDetail : Screen("document_detail/{documentId}") {

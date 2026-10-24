@@ -72,7 +72,8 @@ import com.example.ui.home.HomeScreen
 import com.example.ui.navigation.Screen
 import com.example.ui.profile.ProfileScreen
 import com.example.ui.review.DocumentReviewScreen
-import com.example.ui.scan.ScanIntroScreen
+import com.example.ui.scan.BurstCameraScreen
+import com.example.ui.scan.maxPagesFor
 import com.example.ui.security.LockScreen
 import com.example.ui.settings.SettingsScreen
 import com.example.ui.splash.SplashScreen
@@ -198,19 +199,12 @@ fun ArtifyScannerApp() {
         val scan = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
         if (result.resultCode == android.app.Activity.RESULT_OK && scan != null) {
             val route = navController.currentBackStackEntry?.destination?.route
-            if (route != Screen.DocumentReview.route) {
-                navController.navigate(Screen.DocumentReview.route) {
-                    if (route == Screen.ScanIntro.route) popUpTo(Screen.ScanIntro.route) { inclusive = true }
-                }
-            }
+            if (route != Screen.DocumentReview.route) navController.navigate(Screen.DocumentReview.route)
             scope.launch {
                 for (page in scan.pages.orEmpty()) {
                     ScanningSessionManager.addPageFromUri(context, page.imageUri, ScanFilter.ORIGINAL)
                 }
             }
-        } else if (navController.currentBackStackEntry?.destination?.route == Screen.ScanIntro.route) {
-            // Camera closed without pages: leave the "opening camera" screen instead of reopening the camera
-            navController.popBackStack()
         }
     }
 
@@ -308,7 +302,9 @@ fun ArtifyScannerApp() {
                     repository = repository,
                     onStartScan = { mode ->
                         ScanningSessionManager.startNewSession(mode)
-                        navController.navigate(Screen.ScanIntro.route)
+                        // Burst needs continuous auto-capture, which Google's scanner does not do
+                        if (mode == ScanMode.BURST_SCAN) navController.navigate(Screen.BurstCamera.route)
+                        else launchGoogleScanner(maxPagesFor(mode))
                     },
                     onOpenDocument = { docId -> navController.navigate(Screen.DocumentDetail.createRoute(docId)) },
                     onOpenReview = { navController.navigate(Screen.DocumentReview.route) },
@@ -345,10 +341,13 @@ fun ArtifyScannerApp() {
                 )
             }
 
-            // Animated pre-camera screen, then Google's scanner
-            composable(Screen.ScanIntro.route) {
-                ScanIntroScreen(
-                    onOpenCamera = { maxPages -> launchGoogleScanner(maxPages) },
+            composable(Screen.BurstCamera.route) {
+                BurstCameraScreen(
+                    onDone = {
+                        navController.navigate(Screen.DocumentReview.route) {
+                            popUpTo(Screen.BurstCamera.route) { inclusive = true }
+                        }
+                    },
                     onClose = { navController.popBackStack() }
                 )
             }
