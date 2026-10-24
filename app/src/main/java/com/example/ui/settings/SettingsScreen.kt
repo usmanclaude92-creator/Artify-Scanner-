@@ -142,6 +142,36 @@ fun SettingsScreen() {
                 }
             }
 
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Confirm crop after capture",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                            Text(
+                                text = "Open the corner editor after each shot. Detected edges pre-place the corners; drag to fine-tune. Turn off to crop automatically when edges are found.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = ScanningSessionManager.confirmCropAfterCapture.value,
+                            onCheckedChange = { ScanningSessionManager.setConfirmCrop(context, it) }
+                        )
+                    }
+                }
+            }
+
             // Storage & Maintenance
             item {
                 Text(

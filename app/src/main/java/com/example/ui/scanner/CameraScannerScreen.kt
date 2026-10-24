@@ -170,11 +170,12 @@ fun CameraScannerScreen(
 
     var activeImageCapture: ImageCapture? by remember { mutableStateOf(null) }
     var pendingCropPage by remember { mutableStateOf<CapturedPage?>(null) }
+    var pendingCropGuess by remember { mutableStateOf<NormalizedCornerPoints?>(null) }
 
     pendingCropPage?.let { page ->
         CropDialog(
             originalImagePath = page.originalImagePath,
-            initial = NormalizedCornerPoints(
+            initial = pendingCropGuess ?: NormalizedCornerPoints(
                 PointF(0.04f, 0.04f), PointF(0.96f, 0.04f), PointF(0.96f, 0.96f), PointF(0.04f, 0.96f)
             ),
             onDismiss = { pendingCropPage = null },
@@ -200,8 +201,11 @@ fun CameraScannerScreen(
                     }
                     val detected = withContext(Dispatchers.Default) { ImageProcessor.detectDocumentCornersOrNull(guided) }
                     val page = ScanningSessionManager.addPageFromBitmap(context, guided, autoCrop = false, corners = detected)
-                    // No confident outline: let the user place the corners instead of guessing
-                    if (detected == null) pendingCropPage = page
+                    // Detection only pre-places the corners; the user confirms or drags them
+                    if (detected == null || ScanningSessionManager.confirmCropAfterCapture.value) {
+                        pendingCropPage = page
+                        pendingCropGuess = detected
+                    }
                 }
             },
             onError = { err -> Toast.makeText(context, err, Toast.LENGTH_SHORT).show() }

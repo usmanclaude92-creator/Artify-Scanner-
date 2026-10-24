@@ -31,6 +31,9 @@ object ScanningSessionManager {
     val capturedPages = mutableStateListOf<CapturedPage>()
     val scanMode = mutableStateOf(ScanMode.BATCH_DOCUMENTS)
     val isAutoCapture = mutableStateOf(false)
+
+    /** Open the corner editor after every shutter press (detection only pre-places the corners). */
+    val confirmCropAfterCapture = mutableStateOf(true)
     val isFlashOn = mutableStateOf(false)
     val isProcessingCapture = mutableStateOf(false)
     val statusMessage = mutableStateOf<String?>(null)
@@ -50,6 +53,8 @@ object ScanningSessionManager {
     fun init(context: Context, restore: Boolean) {
         val file = File(context.filesDir, "scan_session.json")
         sessionFile = file
+        val prefs = context.getSharedPreferences("artify_scan", Context.MODE_PRIVATE)
+        confirmCropAfterCapture.value = prefs.getBoolean("confirm_crop", true)
         if (restore && capturedPages.isEmpty()) restoreFrom(file)
         if (persistJob == null) {
             persistJob = persistScope.launch {
@@ -58,6 +63,11 @@ object ScanningSessionManager {
                 }
             }
         }
+    }
+
+    fun setConfirmCrop(context: Context, enabled: Boolean) {
+        confirmCropAfterCapture.value = enabled
+        context.getSharedPreferences("artify_scan", Context.MODE_PRIVATE).edit().putBoolean("confirm_crop", enabled).apply()
     }
 
     private fun writeSession(file: File, pages: List<CapturedPage>, mode: ScanMode) {
