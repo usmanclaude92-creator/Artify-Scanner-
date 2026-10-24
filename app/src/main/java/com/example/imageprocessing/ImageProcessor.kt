@@ -340,9 +340,11 @@ object ImageProcessor {
      */
     fun detectQuadInGray(gray: Mat, refWidth: Int, refHeight: Int): NormalizedCornerPoints? {
         val frameArea = (gray.cols() * gray.rows()).toDouble()
+        // Border lines first; the contour fallback only helps on clean, high-contrast backgrounds.
+        // The bright-region guess is gone: on stacked white papers it confidently picked the whole pile.
         val candidates = listOfNotNull(
-            quadFromEdges(gray, frameArea),
-            quadFromBrightRegion(gray, frameArea)
+            LineQuadDetector.detect(gray)?.corners,
+            quadFromEdges(gray, frameArea)
         )
         for (quad in candidates) {
             val tl = quad.minByOrNull { it.x + it.y }!!
