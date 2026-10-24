@@ -35,6 +35,12 @@ jobs:
           fi
       - name: Unit tests
         run: gradle :app:testDebugUnitTest
+      - name: Build debug APK
+        run: gradle :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: artify-scanner-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
       - name: Publish UI screenshots to branch ci-screenshots
         if: always()
         run: |
@@ -43,14 +49,9 @@ jobs:
             git config user.name "ci" && git config user.email "ci@users.noreply.github.com"
             git checkout --orphan ci-screenshots
             git rm -rf . -q
+            git clean -fdxq
             cp /tmp/shots/* .
             git add . && git commit -q -m "UI screenshots for ${GITHUB_SHA}"
             git push -f origin ci-screenshots
             git checkout -f ${GITHUB_SHA}
           fi
-      - name: Build debug APK
-        run: gradle :app:assembleDebug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: artify-scanner-debug-apk
-          path: app/build/outputs/apk/debug/*.apk

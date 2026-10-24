@@ -10,7 +10,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.model.DocumentCategory
@@ -43,7 +44,7 @@ import java.io.FileOutputStream
 class ScreenshotTest {
 
     @get:Rule
-    val rule = createComposeRule()
+    val rule = createAndroidComposeRule<ComponentActivity>()
 
     private val outDir = File("build/screenshots").apply { mkdirs() }
 
@@ -55,7 +56,22 @@ class ScreenshotTest {
                 }
             }
             rule.waitForIdle()
-            val bitmap = rule.onRoot().captureToImage().asAndroidBitmap()
+            val bitmap = try {
+                rule.onRoot().captureToImage().asAndroidBitmap()
+            } catch (first: Throwable) {
+                // Fall back to drawing the decor view into a software canvas
+                val view = rule.activity.window.decorView
+                val w = if (view.width > 0) view.width else 1080
+                val h = if (view.height > 0) view.height else 2340
+                view.measure(
+                    android.view.View.MeasureSpec.makeMeasureSpec(w, android.view.View.MeasureSpec.EXACTLY),
+                    android.view.View.MeasureSpec.makeMeasureSpec(h, android.view.View.MeasureSpec.EXACTLY)
+                )
+                view.layout(0, 0, w, h)
+                android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888).also {
+                    view.draw(android.graphics.Canvas(it))
+                }
+            }
             FileOutputStream(File(outDir, "$name.png")).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
         } catch (t: Throwable) {
             File(outDir, "$name.error.txt").writeText(t.stackTraceToString())
