@@ -16,3 +16,6 @@
 local.properties
 .env
 debug.keystore
+
+# The shared CI debug key must be tracked so its SHA-1 stays stable
+!ci/debug.keystore
