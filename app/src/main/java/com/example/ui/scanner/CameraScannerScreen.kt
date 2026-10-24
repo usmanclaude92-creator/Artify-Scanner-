@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.result.IntentSenderRequest
+import com.example.data.model.ScanFilter
 import androidx.compose.material.icons.filled.DocumentScanner
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
