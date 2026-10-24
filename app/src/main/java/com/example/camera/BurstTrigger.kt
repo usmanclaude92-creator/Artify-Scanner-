@@ -33,6 +33,10 @@ class BurstTrigger {
     private var phase = Phase.SEARCHING
     private var sawMovement = false
 
+    /** False in Manual mode: the screen only shows the camera and the shutter button takes the photo. */
+    @Volatile
+    var enabled = true
+
     @Volatile
     private var captureInFlight = false
 
@@ -56,6 +60,10 @@ class BurstTrigger {
 
     fun analyze(image: ImageProxy) {
         val now = System.currentTimeMillis()
+        if (!enabled) {
+            if (status.value.phase != Phase.SEARCHING || status.value.message != MANUAL_MESSAGE) publish(Phase.SEARCHING, 0f, MANUAL_MESSAGE)
+            return
+        }
         if (captureInFlight || now - lastTick < TICK_MS) return
         lastTick = now
         try {
@@ -127,6 +135,7 @@ class BurstTrigger {
     }
 
     private companion object {
+        const val MANUAL_MESSAGE = "Tap the shutter to capture"
         const val TICK_MS = 140L
         const val NEEDED_TICKS = 7          // about 1 s without movement
         const val GRID = 24

@@ -13,7 +13,16 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -97,6 +106,9 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
     }
 
     val trigger = remember { BurstTrigger() }
+    var torchOn by remember { mutableStateOf(false) }
+    var autoMode by remember { mutableStateOf(true) }
+    var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     val imageCapture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY).build() }
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val previewView = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
@@ -154,7 +166,7 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
                     .build()
                     .also { a -> a.setAnalyzer(analysisExecutor) { image -> try { trigger.analyze(image) } finally { image.close() } } }
                 provider.unbindAll()
-                provider.bindToLifecycle(context as LifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture, analysis)
+                cameraRef = provider.bindToLifecycle(context as LifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture, analysis)
             } catch (e: Exception) {
                 Toast.makeText(context, "Camera unavailable: ${e.message}", Toast.LENGTH_LONG).show()
             }
@@ -166,51 +178,99 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+    val lastPage = ScanningSessionManager.capturedPages.lastOrNull()
+    val pill = Color(0xCC202124)
 
-        ScanningFrame(Modifier.align(Alignment.Center).padding(bottom = 40.dp).fillMaxWidth(0.82f).aspectRatio(0.72f))
-
-        Row(
-            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp).align(Alignment.TopStart),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    Column(Modifier.fillMaxSize().background(Color(0xFF000000)).statusBarsPadding().navigationBarsPadding()) {
+        // Top bar: close left, flash right (same as Google's scanner)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White) }
-            Text("Burst scan", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = {
+                torchOn = !torchOn
+                cameraRef?.cameraControl?.enableTorch(torchOn)
+            }) {
+                Icon(if (torchOn) Icons.Default.FlashOn else Icons.Default.FlashOff, contentDescription = "Flash", tint = Color.White)
+            }
         }
 
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        // Camera preview with the blue page outline
+        Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f)) {
+            AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+            if (status.phase == BurstTrigger.Phase.HOLD || status.phase == BurstTrigger.Phase.CAPTURING) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val inset = size.width * 0.06f
+                    val topLeft = Offset(inset, inset * 1.6f)
+                    val box = Size(size.width - inset * 2, size.height - inset * 3.2f)
+                    drawRect(Color(0x553D7BFF), topLeft = topLeft, size = box)
+                    drawRect(Color(0xFF1A73E8), topLeft = topLeft, size = box, style = Stroke(width = 3.dp.toPx()))
+                }
+            }
             Text(
                 status.message,
                 color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0x99000000)).padding(horizontal = 16.dp, vertical = 8.dp)
+                fontSize = 17.sp,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
+                    .clip(RoundedCornerShape(24.dp)).background(pill).padding(horizontal = 24.dp, vertical = 12.dp)
             )
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 32.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-                    Text("$pageCount", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(Modifier.weight(1f))
+
+        // Page thumbnail, shutter, done
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 40.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(64.dp).border(2.dp, Color.White, CircleShape).padding(4.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+                if (lastPage != null) {
+                    AsyncImage(model = File(lastPage.localImagePath), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    Text(
+                        "$pageCount", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.background(Color(0x99000000), CircleShape).padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
                 }
-                // Manual shutter as a fallback
+            }
+            Box(
+                Modifier.size(76.dp).border(4.dp, Color.White, CircleShape).padding(6.dp).clip(CircleShape).background(Color.White)
+                    .clickable(enabled = status.phase != BurstTrigger.Phase.CAPTURING) { takePage() }
+            )
+            if (pageCount > 0) {
                 Box(
-                    Modifier.size(72.dp).border(4.dp, Color.White, CircleShape).padding(7.dp).clip(CircleShape)
-                        .background(if (status.progress > 0f) BrandCyan else Color.White)
-                        .clickable(enabled = status.phase != BurstTrigger.Phase.CAPTURING) { takePage() }
-                )
-                Box(
-                    Modifier.size(56.dp).clip(CircleShape).background(if (pageCount > 0) BrandCyan else Color(0x66FFFFFF))
-                        .clickable(enabled = pageCount > 0) { onDone() },
+                    Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFE8EAED)).clickable { onDone() },
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.Default.Check, contentDescription = "Done", tint = Color.Black) }
+            } else {
+                Box(Modifier.size(64.dp))
             }
         }
+
+        // Manual | Auto capture selector
+        Row(
+            Modifier.align(Alignment.CenterHorizontally).padding(top = 22.dp)
+                .clip(RoundedCornerShape(28.dp)).background(Color(0xFF2B2B2B))
+        ) {
+            listOf(false to "Manual", true to "Auto capture").forEach { (auto, label) ->
+                val selected = autoMode == auto
+                Text(
+                    label,
+                    color = if (selected) Color.Black else Color.White,
+                    fontSize = 22.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(28.dp))
+                        .background(if (selected) Color(0xFFE8EAED) else Color.Transparent)
+                        .clickable { autoMode = auto; trigger.enabled = auto }
+                        .padding(horizontal = 32.dp, vertical = 12.dp)
+                )
+            }
+        }
+
+        Text(
+            "Pages are captured one after another. Tap the tick when you are done.",
+            color = Color.White,
+            fontSize = 16.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 18.dp)
+        )
     }
 }
