@@ -256,10 +256,20 @@ fun ArtifyScannerApp() {
                             selected = isSelected,
                             onClick = {
                                 if (currentRoute != item.route) {
-                                    navController.navigate(item.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
+                                    if (item.route == Screen.Home.route) {
+                                        // Home is the bottom of the stack: go back to it, or rebuild it if it was removed
+                                        if (!navController.popBackStack(Screen.Home.route, inclusive = false)) {
+                                            navController.navigate(Screen.Home.route) {
+                                                popUpTo(navController.graph.id) { inclusive = true }
+                                                launchSingleTop = true
+                                            }
+                                        }
+                                    } else {
+                                        navController.navigate(item.route) {
+                                            popUpTo(Screen.Home.route) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
                                     }
                                 }
                             },
