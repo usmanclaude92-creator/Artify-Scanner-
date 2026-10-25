@@ -19,6 +19,40 @@ object PdfShareUtil {
         return FileProvider.getUriForFile(context, authority, file)
     }
 
+    /** Copies the PDF into the phone's public Downloads folder and tells the user. */
+    fun downloadPdf(context: Context, pdfFile: File, displayName: String) {
+        if (!pdfFile.exists()) {
+            Toast.makeText(context, "PDF file not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val name = displayName.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "Scan" }.removeSuffix(".pdf") + ".pdf"
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name)
+                    put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/pdf")
+                    put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val resolver = context.contentResolver
+                val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: error("Downloads is not available")
+                resolver.openOutputStream(uri)?.use { out -> FileInputStream(pdfFile).use { it.copyTo(out) } }
+                    ?: error("Could not write the file")
+                values.clear()
+                values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            } else {
+                @Suppress("DEPRECATION")
+                val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                dir.mkdirs()
+                FileInputStream(pdfFile).use { input -> FileOutputStream(File(dir, name)).use { input.copyTo(it) } }
+            }
+            Toast.makeText(context, "Saved to Downloads: $name", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Could not save to Downloads: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     fun sharePdf(context: Context, pdfFile: File, title: String = "Share Scanned PDF") {
         if (!pdfFile.exists()) {
             Toast.makeText(context, "PDF file not found", Toast.LENGTH_SHORT).show()

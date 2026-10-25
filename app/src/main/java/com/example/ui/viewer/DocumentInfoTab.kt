@@ -22,7 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,7 +47,7 @@ import java.util.Locale
 fun DocumentInfoTab(
     doc: ScannedDocumentItem,
     onShare: () -> Unit,
-    onOpen: () -> Unit,
+    onDownload: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -97,7 +97,7 @@ fun DocumentInfoTab(
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             InfoAction(Icons.Default.Share, "Share", MaterialTheme.colorScheme.primary, onShare)
-            InfoAction(Icons.Default.FileOpen, "Open", MaterialTheme.colorScheme.primary, onOpen)
+            InfoAction(Icons.Default.Download, "Download", MaterialTheme.colorScheme.primary, onDownload)
             InfoAction(Icons.Default.Edit, "Rename", MaterialTheme.colorScheme.primary, onRename)
             InfoAction(Icons.Default.Delete, "Delete", BrandRed, onDelete)
         }

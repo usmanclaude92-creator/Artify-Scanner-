@@ -277,7 +277,7 @@ fun DocumentDetailScreen(
                         0 -> DocumentInfoTab(
                             doc = doc,
                             onShare = { PdfShareUtil.sharePdf(context, File(doc.pdfFilePath), "Share ${doc.title}") },
-                            onOpen = { PdfShareUtil.openPdf(context, File(doc.pdfFilePath)) },
+                            onDownload = { PdfShareUtil.downloadPdf(context, File(doc.pdfFilePath), doc.title) },
                             onRename = {
                                 showRenameDialog = true
                                 renameInput = doc.title
