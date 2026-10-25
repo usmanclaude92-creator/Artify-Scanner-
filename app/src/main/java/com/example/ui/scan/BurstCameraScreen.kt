@@ -21,7 +21,8 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
-import androidx.compose.ui.text.font.FontFamily
+import com.example.ui.theme.InterFamily
+import androidx.compose.ui.graphics.Path
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.filled.FlashOn
@@ -74,6 +75,7 @@ import com.example.camera.BurstTrigger
 import com.example.camera.ScanningSessionManager
 import com.example.data.model.ScanFilter
 import com.example.imageprocessing.ImageProcessor
+import com.example.imageprocessing.PageDetector
 import com.example.ui.theme.BrandCyan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -123,6 +125,7 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
     val status = trigger.status.value
 
     fun takePage() {
+        val liveQuad = trigger.lastQuad
         val file = File(context.cacheDir, "burst_${UUID.randomUUID()}.jpg")
         imageCapture.takePicture(
             ImageCapture.OutputFileOptions.Builder(file).build(),
@@ -139,7 +142,10 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
                                     ExifInterface.ORIENTATION_ROTATE_270 -> 270
                                     else -> 0
                                 }
-                                ScanningSessionManager.addPageFromBitmap(context, ImageProcessor.rotateBitmap(bitmap, degrees), ScanFilter.MAGIC_COLOR)
+                                val upright = ImageProcessor.rotateBitmap(bitmap, degrees)
+                                // Crop to the page: detect it again on the sharp photo, else use the outline seen in the preview
+                                val corners = try { PageDetector.detectInBitmap(upright) } catch (e: Exception) { null } ?: liveQuad
+                                ScanningSessionManager.addPageFromBitmap(context, upright, ScanFilter.MAGIC_COLOR, corners = corners)
                                 true
                             } catch (e: Exception) {
                                 android.util.Log.w("Artify", "Burst page failed", e)
@@ -197,7 +203,7 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
         onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
     }
 
-    val ui = FontFamily.SansSerif
+    val ui = InterFamily
 
     Column(Modifier.fillMaxSize().background(panel)) {
         // Top bar (80dp): close and flash centred 56dp from the top, 28dp from the sides
@@ -207,16 +213,6 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
         ) {
             IconButton(onClick = onClose) { Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White) }
             Spacer(Modifier.weight(1f))
-            if (pageCount > 0) {
-                Row(
-                    Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xFFE8EAED)).clickable { onDone() }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                    Text("  Done ($pageCount)", color = Color.Black, fontSize = 14.sp, fontFamily = ui, fontWeight = FontWeight.Medium)
-                }
-            }
             IconButton(onClick = {
                 torchOn = !torchOn
                 cameraRef?.cameraControl?.enableTorch(torchOn)
@@ -228,6 +224,20 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
         // Camera preview (4:3, full width) with the status pill
         Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).background(Color.Black)) {
             AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+            val quad = status.quad
+            if (quad != null) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val path = Path().apply {
+                        moveTo(quad.topLeft.x * size.width, quad.topLeft.y * size.height)
+                        lineTo(quad.topRight.x * size.width, quad.topRight.y * size.height)
+                        lineTo(quad.bottomRight.x * size.width, quad.bottomRight.y * size.height)
+                        lineTo(quad.bottomLeft.x * size.width, quad.bottomLeft.y * size.height)
+                        close()
+                    }
+                    drawPath(path, Color(0x553D7BFF))
+                    drawPath(path, Color(0xFF1A73E8), style = Stroke(width = 2.5.dp.toPx()))
+                }
+            }
             Box(
                 Modifier.align(Alignment.TopCenter).padding(top = 20.dp).height(44.dp)
                     .clip(RoundedCornerShape(22.dp)).background(Color(0xCC202124)).padding(horizontal = 16.dp),
@@ -308,5 +318,25 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
             )
             Icon(Icons.Outlined.Info, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
+
+        Spacer(Modifier.weight(1f))
+
+        // Done: bottom centre, only once there is a page
+        Box(Modifier.fillMaxWidth().height(48.dp).padding(bottom = 0.dp), contentAlignment = Alignment.Center) {
+            if (pageCount > 0) {
+                Row(
+                    Modifier.height(44.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF8AB4F8)).clickable { onDone() }
+                        .padding(horizontal = 28.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                    Text(
+                        if (pageCount == 1) "  Done \u00b7 1 page" else "  Done \u00b7 $pageCount pages",
+                        color = Color.Black, fontSize = 16.sp, fontFamily = ui, fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
