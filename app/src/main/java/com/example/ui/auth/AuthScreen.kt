@@ -56,6 +56,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.example.ui.components.BrandGradient
@@ -265,29 +270,25 @@ fun AuthScreen(
                 Box(Modifier.weight(1f).height(1.dp).background(MaterialTheme.colorScheme.outline))
             }
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) {
-                SocialIconButton("Google", configured && !busy, { run { onGoogle() } }) {
-                    Text("G", color = Color(0xFF4285F4), fontWeight = FontWeight.Bold, fontSize = 24.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally)) {
+                SocialIconButton("Google", Color(0xFF4285F4), configured && !busy, { run { onGoogle() } }) { GoogleMark(Modifier.size(28.dp)) }
+                SocialIconButton("Facebook", Color(0xFF1877F2), configured && !busy, { run { onProvider("facebook.com") } }) {
+                    Text("f", color = Color(0xFF4D94FF), fontWeight = FontWeight.Bold, fontSize = 34.sp)
                 }
-                SocialIconButton("Facebook", configured && !busy, { run { onProvider("facebook.com") } }) {
-                    Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0xFF1877F2)), contentAlignment = Alignment.Center) {
-                        Text("f", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                    }
-                }
-                SocialIconButton("Microsoft", configured && !busy, { run { onProvider("microsoft.com") } }) {
+                SocialIconButton("Microsoft", Color(0xFF00A4EF), configured && !busy, { run { onProvider("microsoft.com") } }) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Box(Modifier.size(13.dp).background(Color(0xFFF25022)))
-                            Box(Modifier.size(13.dp).background(Color(0xFF7FBA00)))
+                            Box(Modifier.size(12.dp).background(Color(0xFFF25022)))
+                            Box(Modifier.size(12.dp).background(Color(0xFF7FBA00)))
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Box(Modifier.size(13.dp).background(Color(0xFF00A4EF)))
-                            Box(Modifier.size(13.dp).background(Color(0xFFFFB900)))
+                            Box(Modifier.size(12.dp).background(Color(0xFF00A4EF)))
+                            Box(Modifier.size(12.dp).background(Color(0xFFFFB900)))
                         }
                     }
                 }
-                SocialIconButton("Yahoo", configured && !busy, { run { onProvider("yahoo.com") } }) {
-                    Text("Y!", color = Color(0xFF7B1FE8), fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                SocialIconButton("Yahoo", Color(0xFF9646FF), configured && !busy, { run { onProvider("yahoo.com") } }) {
+                    Text("Y!", color = Color(0xFFB078FF), fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
                 }
             }
 
@@ -308,17 +309,41 @@ fun AuthScreen(
 }
 
 
-/** Round white button with a social brand mark, for the "sign up / log in with" row. */
+/** Glass tile with a coloured rim and soft glow, holding a social brand mark. */
 @Composable
-private fun SocialIconButton(label: String, enabled: Boolean, onClick: () -> Unit, mark: @Composable () -> Unit) {
+private fun SocialIconButton(label: String, rim: Color, enabled: Boolean, onClick: () -> Unit, mark: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
     Box(
         modifier = Modifier
-            .size(60.dp)
-            .clip(CircleShape)
-            .background(Color.White)
-            .border(1.dp, Color(0xFFE0E4EC), CircleShape)
+            .size(62.dp)
+            .shadow(10.dp, shape, ambientColor = rim, spotColor = rim)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.5.dp, rim, shape)
             .semantics { contentDescription = label }
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) { mark() }
+}
+
+/** Google's four-colour "G", drawn with arcs so no image asset is needed. */
+@Composable
+private fun GoogleMark(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val stroke = size.minDimension * 0.2f
+        val inset = stroke / 2f
+        val arcSize = Size(size.width - stroke, size.height - stroke)
+        val topLeft = Offset(inset, inset)
+        fun arc(color: Color, start: Float) =
+            drawArc(color, start, 90f, false, topLeft, arcSize, style = Stroke(width = stroke))
+        arc(Color(0xFF4285F4), -45f)
+        arc(Color(0xFF34A853), 45f)
+        arc(Color(0xFFFBBC05), 135f)
+        arc(Color(0xFFEA4335), 225f)
+        drawRect(
+            Color(0xFF4285F4),
+            topLeft = Offset(size.width / 2f, size.height / 2f - stroke / 2f),
+            size = Size(size.width / 2f - inset * 0.2f, stroke)
+        )
+    }
 }
