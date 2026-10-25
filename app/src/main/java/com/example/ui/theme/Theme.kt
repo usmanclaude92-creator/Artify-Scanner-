@@ -15,12 +15,12 @@ object ThemeController {
     val mode = mutableIntStateOf(0)
 
     fun init(context: Context) {
-        mode.intValue = context.getSharedPreferences("artify_ui", Context.MODE_PRIVATE).getInt("theme_mode", 0)
+        mode.intValue = com.example.auth.AccountScope.prefs(context, "artify_ui").getInt("theme_mode", 0)
     }
 
     fun set(context: Context, value: Int) {
         mode.intValue = value
-        context.getSharedPreferences("artify_ui", Context.MODE_PRIVATE).edit().putInt("theme_mode", value).apply()
+        com.example.auth.AccountScope.prefs(context, "artify_ui").edit().putInt("theme_mode", value).apply()
     }
 }
 

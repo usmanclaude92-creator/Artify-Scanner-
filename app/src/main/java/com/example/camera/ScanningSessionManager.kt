@@ -53,8 +53,7 @@ object ScanningSessionManager {
     fun init(context: Context, restore: Boolean) {
         val file = File(context.filesDir, "scan_session.json")
         sessionFile = file
-        val prefs = context.getSharedPreferences("artify_scan", Context.MODE_PRIVATE)
-        confirmCropAfterCapture.value = prefs.getBoolean("confirm_crop", true)
+        reloadPrefs(context)
         if (restore && capturedPages.isEmpty()) restoreFrom(file)
         if (persistJob == null) {
             persistJob = persistScope.launch {
@@ -65,9 +64,14 @@ object ScanningSessionManager {
         }
     }
 
+    /** Re-reads the current account's scan preferences (after sign-in, sign-out or account switch). */
+    fun reloadPrefs(context: Context) {
+        confirmCropAfterCapture.value = com.example.auth.AccountScope.prefs(context, "artify_scan").getBoolean("confirm_crop", true)
+    }
+
     fun setConfirmCrop(context: Context, enabled: Boolean) {
         confirmCropAfterCapture.value = enabled
-        context.getSharedPreferences("artify_scan", Context.MODE_PRIVATE).edit().putBoolean("confirm_crop", enabled).apply()
+        com.example.auth.AccountScope.prefs(context, "artify_scan").edit().putBoolean("confirm_crop", enabled).apply()
     }
 
     private fun writeSession(file: File, pages: List<CapturedPage>, mode: ScanMode) {

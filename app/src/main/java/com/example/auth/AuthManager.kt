@@ -63,10 +63,19 @@ object AuthManager {
         if (isConfigured(app)) {
             FirebaseAuth.getInstance().currentUser?.let {
                 profile.value = fromFirebase(app, it)
+                loadAccountState(app)
                 return
             }
         }
         if (prefs(app).getBoolean("guest", false)) profile.value = guestProfile(app)
+        loadAccountState(app)
+    }
+
+    /** Switches the per-account preferences (theme, scan options, notifications) to whoever is signed in now. */
+    private fun loadAccountState(app: Context) {
+        com.example.ui.theme.ThemeController.init(app)
+        com.example.camera.ScanningSessionManager.reloadPrefs(app)
+        NotificationCenter.reload(app)
     }
 
     private fun fromFirebase(context: Context, user: FirebaseUser): UserProfile {
@@ -95,6 +104,7 @@ object AuthManager {
         val app = context.applicationContext
         prefs(app).edit().putBoolean("guest", true).apply()
         profile.value = guestProfile(app)
+        loadAccountState(app)
         welcomeOnce(app)
     }
 
@@ -109,6 +119,7 @@ object AuthManager {
         }
         prefs(context).edit().putBoolean("guest", false).apply()
         profile.value = fromFirebase(context.applicationContext, user)
+        loadAccountState(context.applicationContext)
         welcomeOnce(context.applicationContext)
     }.mapError()
 
@@ -118,6 +129,7 @@ object AuthManager {
         val user = result.user ?: error("Sign-in failed")
         prefs(context).edit().putBoolean("guest", false).apply()
         profile.value = fromFirebase(context.applicationContext, user)
+        loadAccountState(context.applicationContext)
         welcomeOnce(context.applicationContext)
     }.mapError()
 
@@ -148,6 +160,7 @@ object AuthManager {
         val signedIn = user ?: error("Sign-in failed")
         prefs(activity).edit().putBoolean("guest", false).apply()
         profile.value = fromFirebase(activity.applicationContext, signedIn)
+        loadAccountState(activity.applicationContext)
         welcomeOnce(activity.applicationContext)
     }.mapError()
 
@@ -174,6 +187,7 @@ object AuthManager {
         val signedIn = result.user ?: error("Sign-in failed")
         prefs(activity).edit().putBoolean("guest", false).apply()
         profile.value = fromFirebase(activity.applicationContext, signedIn)
+        loadAccountState(activity.applicationContext)
         welcomeOnce(activity.applicationContext)
     }.mapError()
 
@@ -189,6 +203,8 @@ object AuthManager {
         if (isConfigured(app)) FirebaseAuth.getInstance().signOut()
         prefs(app).edit().putBoolean("guest", false).apply()
         profile.value = null
+        loadAccountState(app)
+        com.example.camera.ScanningSessionManager.startNewSession() // pages of an unfinished scan stay with the account that took them
     }
 
     suspend fun updateName(context: Context, name: String) {

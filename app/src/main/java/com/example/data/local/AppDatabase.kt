@@ -41,17 +41,43 @@ abstract class AppDatabase : RoomDatabase() {
 
         @Volatile
         private var INSTANCE: AppDatabase? = null
+        private var instanceKey: String? = null
 
-        fun getInstance(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    "artify_scanner.db"
-                ).addMigrations(MIGRATION_1_2).build() // never wipe user documents
-                INSTANCE = instance
-                instance
+        private const val LEGACY_NAME = "artify_scanner.db"
+
+        /**
+         * One database per account ("guest" keeps the original file). The first account to sign in on a phone
+         * that already has scans adopts them, so nothing is lost when accounts were introduced.
+         */
+        fun getInstance(context: Context): AppDatabase = synchronized(this) {
+            val app = context.applicationContext
+            val key = com.example.auth.AccountScope.key()
+            val current = INSTANCE
+            if (current != null && instanceKey == key) return current
+            current?.close()
+
+            val dbName = if (key == "guest") LEGACY_NAME else "artify_$key.db"
+            if (key != "guest") adoptLegacyIfFirstAccount(app, dbName)
+
+            val instance = Room.databaseBuilder(app, AppDatabase::class.java, dbName)
+                .addMigrations(MIGRATION_1_2).build() // never wipe user documents
+            INSTANCE = instance
+            instanceKey = key
+            instance
+        }
+
+        private fun adoptLegacyIfFirstAccount(app: Context, dbName: String) {
+            val prefs = app.getSharedPreferences("artify_db", Context.MODE_PRIVATE)
+            if (prefs.getBoolean("legacy_claimed", false)) return
+            val target = app.getDatabasePath(dbName)
+            val legacy = app.getDatabasePath(LEGACY_NAME)
+            if (!target.exists() && legacy.exists()) {
+                for (suffix in listOf("", "-wal", "-shm")) {
+                    val from = java.io.File(legacy.path + suffix)
+                    if (from.exists()) from.renameTo(java.io.File(target.path + suffix))
+                }
             }
+            prefs.edit().putBoolean("legacy_claimed", true).apply()
         }
     }
 }

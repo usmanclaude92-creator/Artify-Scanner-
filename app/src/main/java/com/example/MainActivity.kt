@@ -186,13 +186,12 @@ private fun AppRoot(activity: FragmentActivity, startAtSplash: Boolean) {
 fun ArtifyScannerApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
-    val repository = remember { DocumentRepository(context) }
+    val accountId = AuthManager.profile.value?.id
+    val repository = remember(accountId) { DocumentRepository(context) }
     val scope = rememberCoroutineScope()
 
-    // Seed realistic guide & sample documents on first startup
-    LaunchedEffect(Unit) {
+    LaunchedEffect(accountId) {
         repository.migrateCachedPageImages()
-        repository.seedSampleDocumentsIfEmpty()
     }
 
     // Google's document scanner is the camera for every scan mode; its cropped pages join the session

@@ -16,9 +16,16 @@ object NotificationCenter {
 
     private const val PREFS = "artify_notifications"
 
+    /** Loads the current account's notifications (each account has its own list). */
+    fun reload(context: Context) {
+        items.clear()
+        unread.intValue = 0
+        init(context)
+    }
+
     fun init(context: Context) {
         if (items.isNotEmpty()) return
-        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val p = AccountScope.prefs(context, PREFS, inheritDevice = false)
         try {
             val arr = JSONArray(p.getString("items", "[]"))
             for (i in 0 until arr.length()) {
@@ -51,7 +58,7 @@ object NotificationCenter {
     private fun save(context: Context) {
         val arr = JSONArray()
         items.forEach { arr.put(JSONObject().put("t", it.title).put("b", it.body).put("ts", it.time)) }
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        AccountScope.prefs(context, PREFS, inheritDevice = false).edit()
             .putString("items", arr.toString()).putInt("unread", unread.intValue).apply()
     }
 }
