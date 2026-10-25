@@ -2,6 +2,7 @@ package com.example.imageprocessing
 
 import android.graphics.Bitmap
 import android.graphics.PointF
+import kotlin.math.abs
 import com.example.data.model.NormalizedCornerPoints
 
 /**
@@ -12,6 +13,8 @@ object PageDetector {
 
     private const val MIN_AREA = 0.18f      // sheet must cover at least this share of the frame
     private const val MAX_AREA = 0.985f     // ...and not be the whole frame
+    private const val EDGE_STEP = 8        // brightness change per pixel (0-255) that counts as a sheet edge
+    private const val GROW = 2
     private const val MIN_FILL = 0.72f      // blob area / quad area: rejects irregular shapes (page merged with a laptop)
 
     /** [lum] is an upright w x h grid of brightness values 0..255. Corners are returned as TL, TR, BR, BL. */
@@ -20,8 +23,9 @@ object PageDetector {
         for (v in lum) hist[v.coerceIn(0, 255)]++
         val t1 = otsu(hist, 0, 255)
         val t2 = if (t1 < 250) otsu(hist, t1 + 1, 255) else t1
+        val steep = steepPixels(lum, w, h)
         // Prefer the brightest class (paper against a laptop or table), fall back to the coarse split
-        return quadOfLargestBlob(lum, w, h, t2) ?: if (t1 != t2) quadOfLargestBlob(lum, w, h, t1) else null
+        return quadOfLargestBlob(lum, steep, w, h, t2) ?: if (t1 != t2) quadOfLargestBlob(lum, steep, w, h, t1) else null
     }
 
     fun detectInBitmap(bitmap: Bitmap, gridW: Int = 240, gridH: Int = 320): NormalizedCornerPoints? {
@@ -60,32 +64,36 @@ object PageDetector {
         return best
     }
 
-    private fun quadOfLargestBlob(lum: IntArray, w: Int, h: Int, threshold: Int): NormalizedCornerPoints? {
+    /** Pixels sitting on a strong brightness step. Cutting them apart separates a sheet from a bright laptop it touches. */
+    private fun steepPixels(lum: IntArray, w: Int, h: Int): BooleanArray {
+        val steep = BooleanArray(w * h)
+        for (y in 1 until h - 1) {
+            for (x in 1 until w - 1) {
+                val gx = abs(lum[y * w + x + 1] - lum[y * w + x - 1]) / 2
+                val gy = abs(lum[(y + 1) * w + x] - lum[(y - 1) * w + x]) / 2
+                steep[y * w + x] = maxOf(gx, gy) >= EDGE_STEP
+            }
+        }
+        return steep
+    }
+
+    private fun quadOfLargestBlob(lum: IntArray, steep: BooleanArray, w: Int, h: Int, threshold: Int): NormalizedCornerPoints? {
         val n = w * h
         val seen = BooleanArray(n)
         val queue = IntArray(n)
         var bestArea = 0
-        var bTL = -1; var bTR = -1; var bBR = -1; var bBL = -1
+        var bestStart = -1
 
         for (start in 0 until n) {
-            if (seen[start] || lum[start] <= threshold) continue
+            if (seen[start] || lum[start] <= threshold || steep[start]) continue
             var head = 0
             var tail = 0
             queue[tail++] = start
             seen[start] = true
-            var minSum = Int.MAX_VALUE; var maxSum = Int.MIN_VALUE
-            var minDiff = Int.MAX_VALUE; var maxDiff = Int.MIN_VALUE
-            var iTL = start; var iBR = start; var iBL = start; var iTR = start
             while (head < tail) {
                 val p = queue[head++]
                 val x = p % w
                 val y = p / w
-                val sum = x + y
-                val diff = x - y
-                if (sum < minSum) { minSum = sum; iTL = p }
-                if (sum > maxSum) { maxSum = sum; iBR = p }
-                if (diff < minDiff) { minDiff = diff; iBL = p }
-                if (diff > maxDiff) { maxDiff = diff; iTR = p }
                 for (dy in -1..1) {
                     val ny = y + dy
                     if (ny < 0 || ny >= h) continue
@@ -93,13 +101,60 @@ object PageDetector {
                         val nx = x + dx
                         if (nx < 0 || nx >= w) continue
                         val q = ny * w + nx
-                        if (!seen[q] && lum[q] > threshold) { seen[q] = true; queue[tail++] = q }
+                        if (!seen[q] && lum[q] > threshold && !steep[q]) { seen[q] = true; queue[tail++] = q }
                     }
                 }
             }
-            if (tail > bestArea) { bestArea = tail; bTL = iTL; bTR = iTR; bBR = iBR; bBL = iBL }
+            if (tail > bestArea) { bestArea = tail; bestStart = start }
         }
-        if (bestArea < MIN_AREA * n * 0.8f) return null
+        if (bestStart < 0 || bestArea < MIN_AREA * n * 0.8f) return null
+
+        // Rebuild the winning blob, grow it by two pixels to win back the edge pixels that were cut, take its extreme corners
+        val blob = BooleanArray(n)
+        run {
+            var head = 0; var tail = 0
+            queue[tail++] = bestStart; blob[bestStart] = true
+            while (head < tail) {
+                val p = queue[head++]
+                val x = p % w; val y = p / w
+                for (dy in -1..1) {
+                    val ny = y + dy
+                    if (ny < 0 || ny >= h) continue
+                    for (dx in -1..1) {
+                        val nx = x + dx
+                        if (nx < 0 || nx >= w) continue
+                        val q = ny * w + nx
+                        if (!blob[q] && lum[q] > threshold && !steep[q]) { blob[q] = true; queue[tail++] = q }
+                    }
+                }
+            }
+        }
+        var grown = blob
+        repeat(GROW) {
+            val next = grown.copyOf()
+            for (p in 0 until n) if (grown[p]) {
+                val x = p % w; val y = p / w
+                for (dy in -1..1) for (dx in -1..1) {
+                    val nx = x + dx; val ny = y + dy
+                    if (nx in 0 until w && ny in 0 until h) next[ny * w + nx] = true
+                }
+            }
+            grown = next
+        }
+        var minSum = Int.MAX_VALUE; var maxSum = Int.MIN_VALUE
+        var minDiff = Int.MAX_VALUE; var maxDiff = Int.MIN_VALUE
+        var bTL = 0; var bBR = 0; var bBL = 0; var bTR = 0
+        var grownArea = 0
+        for (p in 0 until n) if (grown[p]) {
+            grownArea++
+            val x = p % w; val y = p / w
+            val sum = x + y; val diff = x - y
+            if (sum < minSum) { minSum = sum; bTL = p }
+            if (sum > maxSum) { maxSum = sum; bBR = p }
+            if (diff < minDiff) { minDiff = diff; bBL = p }
+            if (diff > maxDiff) { maxDiff = diff; bTR = p }
+        }
+        bestArea = grownArea
 
         fun pt(i: Int) = PointF((i % w + 0.5f) / w, (i / w + 0.5f) / h)
         val tl = pt(bTL); val tr = pt(bTR); val br = pt(bBR); val bl = pt(bBL)
