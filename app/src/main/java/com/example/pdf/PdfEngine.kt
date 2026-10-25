@@ -63,7 +63,7 @@ object PdfEngine {
                 }
 
                 try {
-                    writer.addPage(buildPageSpec(bitmap, page, config, writer.pageCount + 1, totalPages))
+                    writer.addPage(buildPageSpec(context, bitmap, page, config, writer.pageCount + 1, totalPages))
                 } finally {
                     bitmap.recycle()
                 }
@@ -95,58 +95,37 @@ object PdfEngine {
     }
 
     private fun buildPageSpec(
+        context: Context,
         bitmap: Bitmap,
         page: CapturedPage,
         config: PdfExportConfig,
         pageNumber: Int,
         totalPages: Int
     ): PdfPageSpec {
-        val (pageWidth, pageHeight) = when (config.pageSize) {
-            PdfPageSize.A4 -> Pair(PdfPageSize.A4.widthPt.toFloat(), PdfPageSize.A4.heightPt.toFloat())
-            PdfPageSize.LETTER -> Pair(PdfPageSize.LETTER.widthPt.toFloat(), PdfPageSize.LETTER.heightPt.toFloat())
-            PdfPageSize.ORIGINAL -> {
-                val scale = min(595f / bitmap.width, 842f / bitmap.height)
-                Pair((bitmap.width * scale).coerceAtLeast(300f), (bitmap.height * scale).coerceAtLeast(400f))
-            }
-        }
-
-        val margin = if (config.pageSize == PdfPageSize.ORIGINAL) 0f else 18f
-        val availableWidth = pageWidth - margin * 2
-        val availableHeight = pageHeight - margin * 2 - if (config.includePageNumbers) 24f else 0f
-
-        val imgAspect = bitmap.width.toFloat() / bitmap.height
-        val drawWidth: Float
-        val drawHeight: Float
-        if (imgAspect > availableWidth / availableHeight) {
-            drawWidth = availableWidth
-            drawHeight = availableWidth / imgAspect
-        } else {
-            drawHeight = availableHeight
-            drawWidth = availableHeight * imgAspect
-        }
-        val left = margin + (availableWidth - drawWidth) / 2f
-        val top = margin + (availableHeight - drawHeight) / 2f
-        val bottom = pageHeight - top - drawHeight // PDF origin is bottom-left
+        // The scan fills the page edge to edge; only a thin branding strip is added underneath.
+        // The sheet is as wide as A4/Letter and as tall as the scan plus the strip needs.
+        val pageWidth = if (config.pageSize == PdfPageSize.LETTER) PdfPageSize.LETTER.widthPt.toFloat() else PdfPageSize.A4.widthPt.toFloat()
+        val combined = PdfFooter.compose(context, bitmap, pageNumber, totalPages, config.includePageNumbers)
+        val pageHeight = pageWidth * combined.height / combined.width
+        val scanHeightPt = pageHeight * bitmap.height / combined.height
 
         val jpeg = ByteArrayOutputStream().also {
-            bitmap.compress(Bitmap.CompressFormat.JPEG, config.quality.jpegQuality, it)
+            combined.compress(Bitmap.CompressFormat.JPEG, config.quality.jpegQuality, it)
         }.toByteArray()
+        combined.recycle()
 
         return PdfPageSpec(
             widthPt = pageWidth,
             heightPt = pageHeight,
             jpeg = jpeg,
             imageWidth = bitmap.width,
-            imageHeight = bitmap.height,
-            drawLeft = left,
-            drawBottom = bottom,
-            drawWidth = drawWidth,
-            drawHeight = drawHeight,
-            hiddenText = textBoxes(page, left, bottom, drawWidth, drawHeight),
-            watermark = config.watermarkText,
-            footerLeft = if (config.includePageNumbers) "Artify Scanner" else "",
-            footerRight = if (config.includePageNumbers) "Page $pageNumber of $totalPages" else "",
-            footerMargin = margin
+            imageHeight = bitmap.height + PdfFooter.stripHeightPx(bitmap.width),
+            drawLeft = 0f,
+            drawBottom = 0f,
+            drawWidth = pageWidth,
+            drawHeight = pageHeight,
+            hiddenText = textBoxes(page, 0f, pageHeight - scanHeightPt, pageWidth, scanHeightPt),
+            watermark = config.watermarkText
         )
     }
 
