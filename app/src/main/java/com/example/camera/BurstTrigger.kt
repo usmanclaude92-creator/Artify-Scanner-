@@ -91,7 +91,12 @@ class BurstTrigger {
                 return
             }
 
-            steadyTicks = if (motion < STEADY_MOTION) steadyTicks + 1 else 0
+            // Small shake neither counts nor resets; only real movement restarts the wait
+            steadyTicks = when {
+                motion < STEADY_MOTION -> steadyTicks + 1
+                motion < SHAKE_MOTION -> steadyTicks
+                else -> 0
+            }
             if (steadyTicks == 0) {
                 phase = Phase.SEARCHING
                 publish(Phase.SEARCHING, 0f, "Scanning\u2026 hold steady")
@@ -114,21 +119,30 @@ class BurstTrigger {
         main.post { status.value = next }
     }
 
-    /** Coarse brightness grid of the Y plane; enough to tell a steady scene from a moving one. */
+    /** Coarse grid of block-averaged brightness, so hand shake and sensor noise barely change it. */
     private fun signature(image: ImageProxy): IntArray? {
         val plane = image.planes[0]
         val buffer = plane.buffer
         val rowStride = plane.rowStride
         val w = image.width
         val h = image.height
+        val cellW = w / GRID
+        val cellH = h / GRID
+        if (cellW < SAMPLES || cellH < SAMPLES) return null
         val sig = IntArray(GRID * GRID)
         for (gy in 0 until GRID) {
-            val y = ((gy + 0.5f) * h / GRID).toInt().coerceIn(0, h - 1)
             for (gx in 0 until GRID) {
-                val x = ((gx + 0.5f) * w / GRID).toInt().coerceIn(0, w - 1)
-                val pos = y * rowStride + x
-                if (pos >= buffer.limit()) return null
-                sig[gy * GRID + gx] = buffer.get(pos).toInt() and 0xFF
+                var sum = 0
+                for (sy in 0 until SAMPLES) {
+                    val y = gy * cellH + (sy * 2 + 1) * cellH / (SAMPLES * 2)
+                    for (sx in 0 until SAMPLES) {
+                        val x = gx * cellW + (sx * 2 + 1) * cellW / (SAMPLES * 2)
+                        val pos = y * rowStride + x
+                        if (pos >= buffer.limit()) return null
+                        sum += buffer.get(pos).toInt() and 0xFF
+                    }
+                }
+                sig[gy * GRID + gx] = sum / (SAMPLES * SAMPLES)
             }
         }
         return sig
@@ -143,10 +157,12 @@ class BurstTrigger {
     private companion object {
         const val MANUAL_MESSAGE = "Tap the shutter to capture"
         const val TICK_MS = 140L
-        const val NEEDED_TICKS = 7          // about 1 s without movement
+        const val NEEDED_TICKS = 6          // about 0.85 s without real movement
+        const val SAMPLES = 4               // sample points per grid cell side
         const val GRID = 24
         const val MIN_LUMA = 45.0           // average brightness (0-255) needed before anything is captured
-        const val STEADY_MOTION = 3f        // average brightness change between ticks that still counts as steady
-        const val TURN_MOTION = 7f          // movement that proves the page was turned or moved away
+        const val STEADY_MOTION = 4f        // average brightness change between ticks that still counts as steady
+        const val SHAKE_MOTION = 9f         // above this the camera is really moving
+        const val TURN_MOTION = 9f          // movement that proves the page was turned or moved away
     }
 }
