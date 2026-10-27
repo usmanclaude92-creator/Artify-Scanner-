@@ -125,6 +125,7 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
     val status = trigger.status.value
 
     fun takePage() {
+        com.example.camera.ShutterSound.play(context)
         val liveQuad = trigger.lastQuad
         val file = File(context.cacheDir, "burst_${UUID.randomUUID()}.jpg")
         imageCapture.takePicture(
@@ -168,6 +169,7 @@ fun BurstCameraScreen(onDone: () -> Unit, onClose: () -> Unit) {
 
     DisposableEffect(Unit) {
         trigger.reset()
+        com.example.camera.ShutterSound.preload(context)
         trigger.onCaptureRequested = { takePage() }
         val providerFuture = ProcessCameraProvider.getInstance(context)
         providerFuture.addListener({
